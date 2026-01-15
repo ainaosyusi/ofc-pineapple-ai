@@ -40,8 +40,16 @@ class TrainingNotifier:
         """学習開始通知"""
         message = f"🚀 **{self.project_name}** - Training Started\n\n"
         message += f"```\n"
-        message += f"Timesteps: {config.get('timesteps', 'N/A'):,}\n"
-        message += f"Opponent Update: {config.get('opponent_update', 'N/A'):,}\n"
+        timesteps = config.get('timesteps', 'N/A')
+        if isinstance(timesteps, int):
+            message += f"Timesteps: {timesteps:,}\n"
+        else:
+            message += f"Timesteps: {timesteps}\n"
+        opponent_update = config.get('opponent_update', 'N/A')
+        if isinstance(opponent_update, int):
+            message += f"Opponent Update: {opponent_update:,}\n"
+        else:
+            message += f"Opponent Update: {opponent_update}\n"
         message += f"Learning Rate: {config.get('lr', 'N/A')}\n"
         message += f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
         message += f"```"
@@ -61,9 +69,8 @@ class TrainingNotifier:
         message += f"**Progress:** {progress:.1f}% ({step:,} / {total_steps:,})\n"
         message += f"```\n"
         message += f"Games: {metrics.get('games', 0):,}\n"
-        message += f"Win Rate: {metrics.get('win_rate', 0):.1f}%\n"
         message += f"Foul Rate: {metrics.get('foul_rate', 0):.1f}%\n"
-        message += f"Mean Score: {metrics.get('mean_score', 0):.2f}\n"
+        message += f"Mean Royalty: {metrics.get('mean_score', 0):.2f}\n"
         message += f"FPS: {metrics.get('fps', 0):.0f}\n"
         message += f"```"
         

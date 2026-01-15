@@ -25,7 +25,7 @@ class OFCPineappleEnv(gym.Env):
     metadata = {'render_modes': ['human', 'ansi']}
     
     # カード枚数
-    NUM_CARDS = 52
+    NUM_CARDS = 54
     NUM_RANKS = 13
     NUM_SUITS = 4
     
@@ -56,9 +56,9 @@ class OFCPineappleEnv(gym.Env):
         # ゲーム状態: 5次元 (ストリート番号、Top埋まり、Mid埋まり、Bot埋まり、FL中)
         
         self.observation_space = spaces.Dict({
-            'board': spaces.MultiBinary(3 * self.NUM_CARDS),  # Top/Mid/Bot x 52
-            'hand': spaces.MultiBinary(5 * self.NUM_CARDS),   # 最大5枚 x 52
-            'used_cards': spaces.MultiBinary(self.NUM_CARDS), # 使用済みカード
+            'board': spaces.MultiBinary(3 * self.NUM_CARDS),  # Top/Mid/Bot x 54
+            'hand': spaces.MultiBinary(5 * self.NUM_CARDS),   # 最大5枚 x 54
+            'used_cards': spaces.MultiBinary(self.NUM_CARDS), # 使用済みカード (54)
             'game_state': spaces.Box(
                 low=0, 
                 high=np.array([5, 3, 5, 5, 1], dtype=np.float32),
@@ -284,7 +284,13 @@ class OFCPineappleEnv(gym.Env):
             hand_obs[i * self.NUM_CARDS + card.index] = 1
         
         # 使用済みカード
+        used_mask = self.engine.remaining_cards_in_board()  # 注意: エンジンのメソッド名や返り値を確認
+        # 本来は全プレイヤーの公開カードの論理和
         used_obs = np.zeros(self.NUM_CARDS, dtype=np.int8)
+        all_mask = ps.board.all_mask()
+        for i in range(self.NUM_CARDS):
+            if (all_mask >> i) & 1:
+                used_obs[i] = 1
         
         # ゲーム状態
         game_state = np.array([

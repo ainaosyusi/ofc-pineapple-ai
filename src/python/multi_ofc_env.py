@@ -39,7 +39,7 @@ class OFCMultiAgentEnv(AECEnv):
     }
     
     # カード枚数
-    NUM_CARDS = 52
+    NUM_CARDS = 54
     NUM_RANKS = 13
     NUM_SUITS = 4
     
@@ -335,7 +335,7 @@ class OFCMultiAgentEnv(AECEnv):
         
         visible_mask = ps.board.all_mask() | opponent_ps.board.all_mask() | hand_mask
         remaining_mask = 0xFFFFFFFFFFFFFFFF & ~visible_mask
-        # 下位52ビットのみ有効にする
+        # 下位54ビットのみ有効にする
         remaining_mask &= ((1 << self.NUM_CARDS) - 1)
         remaining_count = self.NUM_CARDS - bin(visible_mask).count('1')
         

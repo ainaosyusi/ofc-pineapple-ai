@@ -31,7 +31,7 @@ class OFCPhase1Env(gym.Env):
     metadata = {'render_modes': ['human', 'ansi']}
     
     # カード枚数
-    NUM_CARDS = 52
+    NUM_CARDS = 54
     NUM_RANKS = 13
     NUM_SUITS = 4
     
@@ -68,7 +68,7 @@ class OFCPhase1Env(gym.Env):
         
         # 観測空間
         self.observation_space = spaces.Dict({
-            'board': spaces.MultiBinary(3 * self.NUM_CARDS),  # 3行 x 52カード
+            'board': spaces.MultiBinary(3 * self.NUM_CARDS),  # 3行 x 54カード
             'hand': spaces.MultiBinary(5 * self.NUM_CARDS),   # 最大5枚
             'used_cards': spaces.MultiBinary(self.NUM_CARDS),
             'game_state': spaces.Box(

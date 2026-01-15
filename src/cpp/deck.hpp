@@ -67,7 +67,7 @@ class Deck {
 public:
   Deck() { reset(); }
 
-  // デッキをリセット（全52枚を順番に）
+  // デッキをリセット（全54枚を順番に）
   void reset() {
     for (int i = 0; i < NUM_CARDS; ++i) {
       cards_[i] = Card(static_cast<uint8_t>(i));
@@ -175,15 +175,17 @@ public:
       }
     }
 
-    // 残りカードを復元
+    // 状態を復元
     for (size_t i = 1; i < data.size() && (top_ + i - 1) < NUM_CARDS; ++i) {
       cards_[top_ + i - 1] = Card(data[i]);
     }
 
     // 使用済みカードのマスクを計算
     used_mask_ = EMPTY_MASK;
+    // シャッフルされた cards_ 配列の中で、既に引かれた (0〜top_-1)
+    // を使用済みとする
     for (int i = 0; i < top_; ++i) {
-      used_mask_ |= cards_[i].to_mask();
+      used_mask_ |= index_to_mask(cards_[i].index);
     }
 
     return true;

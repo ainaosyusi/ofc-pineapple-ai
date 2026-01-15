@@ -217,88 +217,110 @@ inline int check_straight_flush(CardMask hand) {
 inline HandValue evaluate_5card(CardMask hand) {
   using namespace detail;
 
-  auto counts = count_ranks(hand);
+  int num_jokers = count_cards(hand & JOKER_MASK);
+  CardMask normal_cards = hand & ~JOKER_MASK;
+  auto counts = count_ranks(normal_cards);
 
-  // ペア/トリップス/クアッズのカウント
-  int pairs = 0, trips = 0, quads = 0;
-  Rank pair_rank = ACE, trip_rank = ACE, quad_rank = ACE;
+  // 1. ストレートフラッシュ / ロイヤル
+  for (int s = 0; s < NUM_SUITS; ++s) {
+    CardMask suit_hand = normal_cards & SUIT_MASKS[s];
+    auto suit_counts = count_ranks(suit_hand);
 
+    // A-high (Royal Flush)
+    int present = (suit_counts[ACE] > 0) + (suit_counts[KING] > 0) +
+                  (suit_counts[QUEEN] > 0) + (suit_counts[JACK] > 0) +
+                  (suit_counts[TEN] > 0);
+    if (present + num_jokers >= 5)
+      return HandValue(ROYAL_FLUSH, 14);
+
+    // Normal SF
+    for (int high = KING; high >= FIVE; --high) {
+      int p = 0;
+      for (int i = 0; i < 5; ++i)
+        if (suit_counts[high - i] > 0)
+          p++;
+      if (p + num_jokers >= 5)
+        return HandValue(STRAIGHT_FLUSH, high);
+    }
+    // Wheel SF
+    int p_wheel = (suit_counts[ACE] > 0) + (suit_counts[TWO] > 0) +
+                  (suit_counts[THREE] > 0) + (suit_counts[FOUR] > 0) +
+                  (suit_counts[FIVE] > 0);
+    if (p_wheel + num_jokers >= 5)
+      return HandValue(STRAIGHT_FLUSH, FIVE);
+  }
+
+  // 2. フォーカード
   for (int r = NUM_RANKS - 1; r >= 0; --r) {
-    switch (counts[r]) {
-    case 4:
-      quads++;
-      quad_rank = static_cast<Rank>(r);
-      break;
-    case 3:
-      trips++;
-      trip_rank = static_cast<Rank>(r);
-      break;
-    case 2:
-      pairs++;
-      if (pairs == 1)
-        pair_rank = static_cast<Rank>(r);
-      break;
+    if (counts[r] + num_jokers >= 4)
+      return HandValue(FOUR_OF_A_KIND, r);
+  }
+
+  // 3. フルハウス
+  // トリップス + ペア
+  for (int r1 = NUM_RANKS - 1; r1 >= 0; --r1) {
+    for (int r2 = NUM_RANKS - 1; r2 >= 0; --r2) {
+      if (r1 == r2)
+        continue;
+      // 必要枚数 = (3 - counts[r1]) + (2 - counts[r2])
+      int needed = std::max(0, 3 - counts[r1]) + std::max(0, 2 - counts[r2]);
+      if (needed <= num_jokers)
+        return HandValue(FULL_HOUSE, r1 * 16 + r2);
     }
   }
 
-  bool flush = is_flush(hand);
-  int straight_high = check_straight(counts);
+  // 4. フラッシュ
+  for (int s = 0; s < NUM_SUITS; ++s) {
+    if (count_cards(normal_cards & SUIT_MASKS[s]) + num_jokers >= 5)
+      return HandValue(FLUSH, 0);
+  }
 
-  // ストレートフラッシュ判定
-  if (flush && straight_high >= 0) {
-    int sf_high = check_straight_flush(hand);
-    if (sf_high >= 0) {
-      if (sf_high == 14) { // A-high straight flush = Royal (Ace=14)
-        return HandValue(ROYAL_FLUSH, sf_high);
-      }
-      return HandValue(STRAIGHT_FLUSH, sf_high);
+  // 5. ストレート
+  // A-high
+  int p_ace = (counts[ACE] > 0) + (counts[KING] > 0) + (counts[QUEEN] > 0) +
+              (counts[JACK] > 0) + (counts[TEN] > 0);
+  if (p_ace + num_jokers >= 5)
+    return HandValue(STRAIGHT, 14);
+  for (int high = KING; high >= FIVE; --high) {
+    int p = 0;
+    for (int i = 0; i < 5; ++i)
+      if (counts[high - i] > 0)
+        p++;
+    if (p + num_jokers >= 5)
+      return HandValue(STRAIGHT, high);
+  }
+  int p_wheel = (counts[ACE] > 0) + (counts[TWO] > 0) + (counts[THREE] > 0) +
+                (counts[FOUR] > 0) + (counts[FIVE] > 0);
+  if (p_wheel + num_jokers >= 5)
+    return HandValue(STRAIGHT, FIVE);
+
+  // 6. スリーオブアカインド
+  for (int r = NUM_RANKS - 1; r >= 0; --r) {
+    if (counts[r] + num_jokers >= 3)
+      return HandValue(THREE_OF_A_KIND, r);
+  }
+
+  // 7. ツーペア
+  // 3枚の非ジョーカーカードのうち、ペア + シングルの場合: (X,X,Y,J,J) は
+  // フルハウスになるはずなので、ここに来るのは num_jokers が少ない場合
+  for (int r1 = NUM_RANKS - 1; r1 >= 0; --r1) {
+    for (int r2 = r1 - 1; r2 >= 0; --r2) {
+      int needed = std::max(0, 2 - counts[r1]) + std::max(0, 2 - counts[r2]);
+      if (needed <= num_jokers)
+        return HandValue(TWO_PAIR, r1);
     }
   }
 
-  // フォーカード
-  if (quads > 0) {
-    return HandValue(FOUR_OF_A_KIND, quad_rank);
-  }
-
-  // フルハウス
-  if (trips > 0 && pairs > 0) {
-    return HandValue(FULL_HOUSE, trip_rank * 16 + pair_rank);
-  }
-  if (trips >= 2) {
-    // トリップス2つ = フルハウス扱い
-    return HandValue(FULL_HOUSE, trip_rank);
-  }
-
-  // フラッシュ
-  if (flush) {
-    return HandValue(FLUSH, 0); // キッカーは簡略化
-  }
-
-  // ストレート
-  if (straight_high >= 0) {
-    return HandValue(STRAIGHT, straight_high);
-  }
-
-  // スリーオブアカインド
-  if (trips > 0) {
-    return HandValue(THREE_OF_A_KIND, trip_rank);
-  }
-
-  // ツーペア
-  if (pairs >= 2) {
-    return HandValue(TWO_PAIR, pair_rank);
-  }
-
-  // ワンペア
-  if (pairs == 1) {
-    return HandValue(ONE_PAIR, pair_rank);
-  }
-
-  // ハイカード
+  // 8. ワンペア
   for (int r = NUM_RANKS - 1; r >= 0; --r) {
-    if (counts[r] > 0) {
+    if (counts[r] + num_jokers >= 2)
+      return HandValue(ONE_PAIR, r);
+  }
+
+  // 9. ハイカード
+  for (int r = NUM_RANKS - 1; r >= 0; --r) {
+    if (counts[r] > 0)
       return HandValue(HIGH_CARD, r);
-    }
   }
 
   return HandValue(HIGH_CARD, 0);
@@ -311,27 +333,26 @@ inline HandValue evaluate_5card(CardMask hand) {
 inline HandValue evaluate_3card(CardMask hand) {
   using namespace detail;
 
-  auto counts = count_ranks(hand);
+  int num_jokers = count_cards(hand & JOKER_MASK);
+  CardMask normal_cards = hand & ~JOKER_MASK;
+  auto counts = count_ranks(normal_cards);
 
-  // トリップスチェック
+  // トリップス
   for (int r = NUM_RANKS - 1; r >= 0; --r) {
-    if (counts[r] == 3) {
+    if (counts[r] + num_jokers >= 3)
       return HandValue(THREE_OF_A_KIND, r);
-    }
   }
 
-  // ペアチェック
+  // ペア
   for (int r = NUM_RANKS - 1; r >= 0; --r) {
-    if (counts[r] == 2) {
+    if (counts[r] + num_jokers >= 2)
       return HandValue(ONE_PAIR, r);
-    }
   }
 
   // ハイカード
   for (int r = NUM_RANKS - 1; r >= 0; --r) {
-    if (counts[r] > 0) {
+    if (counts[r] > 0)
       return HandValue(HIGH_CARD, r);
-    }
   }
 
   return HandValue(HIGH_CARD, 0);
