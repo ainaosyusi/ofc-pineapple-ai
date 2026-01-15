@@ -1,0 +1,24 @@
+# Core ML
+stable-baselines3>=2.0.0
+sb3-contrib>=2.0.0
+gymnasium>=0.29.0
+numpy>=1.24.0
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+pandas
+
+# Multi-Agent RL
+pettingzoo>=1.24.0
+supersuit>=3.9.0
+
+# AWS Integration
+boto3>=1.28.0
+
+# Notifications
+requests>=2.31.0
+
+# Development
+pybind11>=2.11.0
+
+# Visualization
+tensorboard>=2.14.0

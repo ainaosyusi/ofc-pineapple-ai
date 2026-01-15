@@ -1,0 +1,44 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info
+.eggs
+*.egg
+.venv
+venv
+env
+
+# Build artifacts (will be rebuilt in container)
+build/
+*.so
+*.o
+*.a
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Logs and models (mounted as volumes)
+logs/
+models/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Tests (optional, can include if needed)
+# tests/
+
+# OS
+.DS_Store
+Thumbs.db

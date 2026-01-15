@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+venv/
+ENV/
+
+# C++
+build/
+bin/
+*.o
+*.so
+*.dylib
+*.a
+
+# AWS/Secrets
+.env
+*.pem
+
+# IDEs
+.vscode/
+.idea/
+.DS_Store
+
+# Logs and Models
+logs/
+models/*.zip
+models/*.pth
+checkpoints/
+
+# Other
+.agent/
+.gemini/
+.cagent/

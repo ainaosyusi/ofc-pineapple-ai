@@ -1,0 +1,124 @@
+version: '3.8'
+
+services:
+  # Phase 1/2: Solitaire training
+  training:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ofc-training-phase1
+
+    # Mount volumes for persistence
+    volumes:
+      - ./models:/app/models
+      - ./logs:/app/logs
+
+    # Environment variables
+    environment:
+      - TOTAL_TIMESTEPS=${TOTAL_TIMESTEPS:-5000000}
+      - OPPONENT_UPDATE_FREQ=${OPPONENT_UPDATE_FREQ:-20000}
+      - NOTIFICATION_INTERVAL=${NOTIFICATION_INTERVAL:-10000}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_REGION=${AWS_REGION:-ap-northeast-1}
+      - S3_BUCKET=${S3_BUCKET:-}
+
+    # Resource limits (adjust based on instance)
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Logging
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: Local development with live reload
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ofc-dev
+    volumes:
+      - .:/app
+      - ./models:/app/models
+      - ./logs:/app/logs
+    environment:
+      - TOTAL_TIMESTEPS=5000
+      - NOTIFICATION_INTERVAL=1000
+    command: [ "python", "src/python/train_selfplay.py", "--timesteps", "5000" ]
+    profiles:
+      - dev
+
+  # Phase 3: Self-Play training (AWS production)
+  phase3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ofc-training-phase3
+
+    volumes:
+      - ./models:/app/models
+      - ./logs:/app/logs
+
+    environment:
+      - TOTAL_TIMESTEPS=${TOTAL_TIMESTEPS:-10000000}
+      - OPPONENT_UPDATE_FREQ=${OPPONENT_UPDATE_FREQ:-100000}
+      - SAVE_FREQ=${SAVE_FREQ:-200000}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL:-}
+
+    command: [ "python", "src/python/train_aws_phase3.py", "--steps", "${TOTAL_TIMESTEPS:-10000000}", "--opponent-update", "${OPPONENT_UPDATE_FREQ:-100000}", "--save-freq", "${SAVE_FREQ:-200000}", "--batch-size", "128" ]
+
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 8G
+
+    restart: unless-stopped
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+    profiles:
+      - phase3
+
+  # Enhanced Phase 3: Self-Play with Probability Features and Dual Training
+  enhanced-phase3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ofc-training-enhanced
+    volumes:
+      - ./models:/app/models
+      - ./logs:/app/logs
+    environment:
+      - TOTAL_TIMESTEPS=${TOTAL_TIMESTEPS:-10000000}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
+    command: [ "python", "src/python/train_enhanced_phase3.py" ]
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 8G
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    profiles:
+      - enhanced
