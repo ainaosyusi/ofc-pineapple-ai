@@ -1,46 +1,46 @@
-# OFC Pineapple AI (Enhanced)
+# OFC Pineapple AI (強化版)
 
-Advanced Reinforcement Learning for Open-Face Chinese Poker (Pineapple variant) using C++ Engine and MaskablePPO.
+C++エンジンと MaskablePPO を活用した、Open-Face Chinese Poker (Pineapple バリアント) のための高度な強化学習プロジェクト。
 
-## Overview
+## 概要
 
-This project aims to build a world-class OFC Pineapple AI capable of strategic decision-making and optimal royalty extraction. It leverages a high-performance C++ game engine for simulations and Stable-Baselines3 (MaskablePPO) for deep reinforcement learning.
+このプロジェクトは、戦略的な意思決定と最適なロイヤリティ（役ボーナス）獲得が可能な、世界レベルの OFC Pineapple AI を構築することを目的としています。シミュレーション用の高性能 C++ ゲームエンジンと、深層強化学習用の Stable-Baselines3 (MaskablePPO) を組み合わせています。
 
-## Key Features
+## 主な特徴
 
-- **High-Performance C++ Engine**: Core game logic and hand evaluation implemented in C++ for maximum speed (~1,600 FPS during training).
-- **MaskablePPO**: Utilizes Action Masking to eliminate illegal moves, significantly accelerating the learning process.
-- **Probability Features**: Observation space includes real-time calculations of Flush and Straight completion rates.
-- **MCTS Integration**: Monte Carlo Tree Search with Policy-guided rollouts for forward-looking strategic planning.
-- **Endgame Solver**: Exhaustive search for the final streets (<= 5 cards) ensuring perfect play in the late game.
-- **Self-Play Architecture**: Training through "Latest vs Pool" competitive self-play.
-- **Auto-Curriculum**: Automated feedback system that monitors training progress and provides strategic insights via Discord/Slack.
+- **高性能 C++ エンジン**: ゲームロジックと役判定を C++ で実装し、学習時 1,600 FPS 以上の高速処理を実現。
+- **MaskablePPO**: 有効アクションのみを選択する「アクション・マスキング」により、無効な配置による無駄な探索を排除。
+- **確率特徴量**: フラッシュやストレートの完成確率をリアルタイムに計算し、AI の観測情報（Observation）に追加。
+- **MCTS（モンテカルロ木探索）**: Policy 誘導型ロールアウトを用いた先読み戦略。
+- **エンドゲーム・ソルバー**: 残り 5 枚以下の局面で全探索を行い、終盤の完璧なプレイを保証。
+- **セルフプレイ構築**: 「最新モデル vs 過去モデル（Pool）」による継続的な自己対戦学習。
+- **自動カリキュラム (Auto-Curriculum)**: 学習進捗を AI が自己分析し、Discord/Slack を通じて戦略的なアドバイスを通知するシステム。
 
-## Tech Stack
+## 技術スタック
 
-- **Core**: C++, Python (pybind11)
-- **RL Framework**: Stable-Baselines3 (sb3-contrib)
-- **Infrastructure**: AWS EC2 (m7i-flex.large), Docker, Docker Compose
-- **Monitoring**: Discord/Slack Webhooks, Tensorboard
+- **コア**: C++, Python (pybind11)
+- **強化学習**: Stable-Baselines3 (sb3-contrib)
+- **インフラ**: AWS EC2 (m7i-flex.large), Docker, Docker Compose
+- **モニタリング**: Discord/Slack Webhooks, Tensorboard
 
-## Project Structure
+## プロジェクト構造
 
-- `src/cpp/`: High-performance game engine and evaluation logic.
-- `src/python/`: Training scripts, MCTS implementation, and Gym environments.
-- `docs/research/`: Deep dives into the RL strategies and mathematical models.
-- `docs/blog/`: Development journey and technical summaries.
+- `src/cpp/`: 高性能ゲームエンジンと評価ロジック。
+- `src/python/`: 学習スクリプト、MCTS 実装、Gym 環境。
+- `docs/research/`: 強化学習戦略や数学的モデルの深掘りレポート。
+- `docs/blog/`: 開発の過程や技術的なまとめ（note などのブログ用）。
 
-## How to Run
+## 実行方法
 
-1. **Build Engine**:
+1. **エンジンのビルド**:
    ```bash
    python setup.py build_ext --inplace
    ```
-2. **Train Locally**:
+2. **ローカル学習の開始**:
    ```bash
    python src/python/train_enhanced_phase3.py --steps 1000000
    ```
-3. **Deploy to AWS**:
+3. **AWS へのデプロイ**:
    ```bash
    python src/python/deploy_enhanced.py
    ```
