@@ -46,4 +46,3 @@ C++エンジンと MaskablePPO を活用した、Open-Face Chinese Poker (Pineap
    ```
 
 ---
-*Created by Advanced Agentic Coding Team*

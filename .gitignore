@@ -51,3 +51,4 @@ checkpoints/
 .agent/
 .gemini/
 .cagent/
+.gh_config/
