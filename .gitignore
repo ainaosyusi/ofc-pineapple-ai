@@ -52,3 +52,6 @@ checkpoints/
 .gemini/
 .cagent/
 .gh_config/
+
+# Private info
+.aws_private_info.md

@@ -264,8 +264,57 @@ class Phase5Callback(BaseCallback):
         self.model.save(path)
         print(f"[Checkpoint] Model saved to {path}.zip")
         
+        # 不要な古いチェックポイントを削除（ストレージ対策）
+        self._cleanup_old_checkpoints()
+        
         if self.notifier and self.notifier.enabled:
             self.notifier.send_checkpoint(f"{path}.zip", self.n_calls)
+
+    def _cleanup_old_checkpoints(self):
+        """最新5つと100万ステップごとの節目以外のチェックポイントを削除"""
+        import glob
+        import re
+        
+        # モデルが保存されているディレクトリ
+        dir_name = os.path.dirname(self.save_path)
+        if not dir_name: dir_name = "."
+        
+        # 現在のプレフィックスに一致するファイルを検索
+        file_prefix = os.path.basename(self.save_path)
+        pattern = os.path.join(dir_name, f"{file_prefix}_*_steps.zip")
+        files = glob.glob(pattern)
+        
+        if len(files) <= 5:
+            return
+            
+        # ステップ数を抽出してソート
+        checkpoint_files = []
+        for f in files:
+            match = re.search(r'_(\d+)_steps\.zip$', f)
+            if match:
+                step = int(match.group(1))
+                checkpoint_files.append((step, f))
+        
+        checkpoint_files.sort()
+        
+        # 保持ルール: 最新5つ + 100万ステップごとの節目
+        keep_last = 5
+        keep_milestone = 1_000_000
+        
+        num_files = len(checkpoint_files)
+        for i, (step, f) in enumerate(checkpoint_files):
+            # 最後の5つはスキップ
+            if i >= num_files - keep_last:
+                continue
+            # 節目のステップはスキップ
+            if step % keep_milestone == 0:
+                continue
+            
+            # それ以外は削除
+            try:
+                os.remove(f)
+            except Exception as e:
+                print(f"Warning: Could not delete old checkpoint {f}: {e}")
     
     def _send_progress_notification(self):
         if not self.notifier or not self.notifier.enabled:

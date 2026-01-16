@@ -268,19 +268,13 @@ class OFC3MaxEnv(AECEnv):
             return False
         
         # アクションをデコード
-        discard_idx = action // 81
-        remaining_action = action % 81
-        
-        if discard_idx >= len(hand):
-            return False
-        
         # 2枚の配置先
         placements = []
-        temp = remaining_action
-        for _ in range(2):
-            row = temp % 3
-            temp //= 3
-            placements.append(row)
+        temp = action 
+        row1 = temp % 3
+        row2 = (temp // 3) % 3
+        discard_idx = (temp // 9) % 3
+        placements = [row1, row2]
         
         # 容量チェック
         board = ps.board
@@ -311,7 +305,12 @@ class OFC3MaxEnv(AECEnv):
         """3人分の最終報酬を計算（C++側で計算済み）"""
         result = self.engine.result()
         for i, agent in enumerate(self.possible_agents):
-            self.rewards[agent] = float(result.get_score(i))
+            score = float(result.get_score(i))
+            # FL突入ボーナス (Phase 8用強化: Superhuman Strategy)
+            # Top QQ+ でFLに入った瞬間に +15.0 の巨大な報酬を与える
+            if result.entered_fl(i):
+                score += 15.0
+            self.rewards[agent] = score
     
     def _get_observation(self, agent):
         """エージェントの観測を取得"""
@@ -327,14 +326,20 @@ class OFC3MaxEnv(AECEnv):
         for i, card in enumerate(hand[:5]):
             my_hand[i * self.NUM_CARDS + card.index] = 1
         
-        # 下家と上家のボード
+        # 下家と上家のボード (FLプレイヤーのボードはショーダウンまで隠蔽)
         next_idx, prev_idx = self._get_relative_positions(player_idx)
         
         next_ps = self.engine.player(next_idx)
-        next_board = self._board_to_array(next_ps.board)
+        if next_ps.in_fantasy_land and self.engine.phase() not in [ofc.GamePhase.SHOWDOWN, ofc.GamePhase.COMPLETE]:
+            next_board = np.zeros(3 * self.NUM_CARDS, dtype=np.int8)
+        else:
+            next_board = self._board_to_array(next_ps.board)
         
         prev_ps = self.engine.player(prev_idx)
-        prev_board = self._board_to_array(prev_ps.board)
+        if prev_ps.in_fantasy_land and self.engine.phase() not in [ofc.GamePhase.SHOWDOWN, ofc.GamePhase.COMPLETE]:
+            prev_board = np.zeros(3 * self.NUM_CARDS, dtype=np.int8)
+        else:
+            prev_board = self._board_to_array(prev_ps.board)
         
         # 自分の捨て札
         my_discards = self.player_discards[agent].copy()
@@ -461,9 +466,15 @@ class OFC3MaxEnv(AECEnv):
                     bot_new = board.count(ofc.BOTTOM) + [row1, row2].count(2)
                     
                     if top_new <= self.TOP_SIZE and mid_new <= self.MID_SIZE and bot_new <= self.BOT_SIZE:
-                        action = discard_idx * 81 + placement_action
+                        # Compact 27-action space: row1 + row2*3 + discard*9
+                        action = (discard_idx * 9) + (row2 * 3) + row1
                         valid_actions.append(action)
         
+        if not valid_actions:
+            print(f"[Env] Warning: No valid actions for {agent} at street {self.current_street}. Board: {board.total_placed()} cards.")
+            # Fallback: just return the first possible if any, or 0
+            valid_actions = [0]
+            
         return valid_actions
     
     def action_masks(self, agent):

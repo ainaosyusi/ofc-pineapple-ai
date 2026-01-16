@@ -9,7 +9,9 @@
 #include "../deck.hpp"
 #include "../evaluator.hpp"
 #include "../game.hpp"
+#include "../mcts.hpp"
 #include "../probability.hpp"
+#include "../solver.hpp"
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -158,6 +160,8 @@ PYBIND11_MODULE(ofc_engine, m) {
       .def_readonly("hand_count", &ofc::PlayerState::hand_count)
       .def_readonly("in_fantasy_land", &ofc::PlayerState::in_fantasy_land)
       .def("get_hand", [](const ofc::PlayerState &ps) {
+        if (!ps.fl_hand.empty())
+          return ps.fl_hand;
         std::vector<ofc::Card> hand;
         for (int i = 0; i < ps.hand_count; ++i) {
           hand.push_back(ps.hand[i]);
@@ -202,6 +206,12 @@ PYBIND11_MODULE(ofc_engine, m) {
       .def("set_placement", [](ofc::TurnAction &a, int i, ofc::Card c,
                                ofc::Row r) { a.placements[i] = {c, r}; });
 
+  py::class_<ofc::FLAction>(m, "FLAction")
+      .def(py::init<>())
+      .def_readwrite("discards", &ofc::FLAction::discards)
+      .def("set_placement", [](ofc::FLAction &a, int i, ofc::Card c,
+                               ofc::Row r) { a.placements[i] = {c, r}; });
+
   // ============================================
   // GameEngine
   // ============================================
@@ -214,8 +224,20 @@ PYBIND11_MODULE(ofc_engine, m) {
              ofc::FastRNG rng(seed);
              e.start_new_game(rng);
            })
+      .def("start_with_fl",
+           [](ofc::GameEngine &e, uint64_t seed, std::vector<bool> fl_status) {
+             ofc::FastRNG rng(seed);
+             std::array<bool, ofc::MAX_PLAYERS> fl_array = {false};
+             for (size_t i = 0;
+                  i < std::min(fl_status.size(), (size_t)ofc::MAX_PLAYERS);
+                  ++i) {
+               fl_array[i] = fl_status[i];
+             }
+             e.start_with_fl(rng, fl_array);
+           })
       .def("apply_initial_action", &ofc::GameEngine::apply_initial_action)
       .def("apply_turn_action", &ofc::GameEngine::apply_turn_action)
+      .def("apply_fl_action", &ofc::GameEngine::apply_fl_action)
       .def("phase", &ofc::GameEngine::phase)
       .def("current_turn", &ofc::GameEngine::current_turn)
       .def("num_players", &ofc::GameEngine::num_players)
@@ -266,4 +288,102 @@ PYBIND11_MODULE(ofc_engine, m) {
         "Calculate straight completion probability", py::arg("current_cards"),
         py::arg("current_count"), py::arg("remaining_deck"),
         py::arg("remaining_count"));
+
+  // ============================================
+  // Fantasy Solver
+  // ============================================
+
+  py::class_<ofc::FantasySolution>(m, "FantasySolution")
+      .def_readwrite("top", &ofc::FantasySolution::top)
+      .def_readwrite("mid", &ofc::FantasySolution::mid)
+      .def_readwrite("bot", &ofc::FantasySolution::bot)
+      .def_readwrite("discards", &ofc::FantasySolution::discards)
+      .def_readwrite("score", &ofc::FantasySolution::score)
+      .def_readwrite("stayed", &ofc::FantasySolution::stayed);
+
+  m.def("solve_fantasy_land", &ofc::FantasySolver::solve,
+        "Solve Fantasy Land optimal placement", py::arg("cards"),
+        py::arg("already_in_fl") = true);
+
+  // ============================================
+  // MCTS Support Functions
+  // ============================================
+
+  py::class_<ofc::FLProbabilityResult>(m, "FLProbabilityResult")
+      .def_readonly("prob_qq", &ofc::FLProbabilityResult::prob_qq)
+      .def_readonly("prob_kk", &ofc::FLProbabilityResult::prob_kk)
+      .def_readonly("prob_aa", &ofc::FLProbabilityResult::prob_aa)
+      .def_readonly("prob_trips", &ofc::FLProbabilityResult::prob_trips)
+      .def_readonly("total_prob", &ofc::FLProbabilityResult::total_prob)
+      .def_readonly("expected_ev", &ofc::FLProbabilityResult::expected_ev);
+
+  py::class_<ofc::MCTSEvaluation>(m, "MCTSEvaluation")
+      .def_readonly("base_score", &ofc::MCTSEvaluation::base_score)
+      .def_readonly("fl_value", &ofc::MCTSEvaluation::fl_value)
+      .def_readonly("foul_penalty", &ofc::MCTSEvaluation::foul_penalty)
+      .def_readonly("total_value", &ofc::MCTSEvaluation::total_value);
+
+  py::class_<ofc::PlacementEvaluation>(m, "PlacementEvaluation")
+      .def_readonly("action_id", &ofc::PlacementEvaluation::action_id)
+      .def_readonly("immediate_value", &ofc::PlacementEvaluation::immediate_value)
+      .def_readonly("fl_potential", &ofc::PlacementEvaluation::fl_potential)
+      .def_readonly("foul_risk", &ofc::PlacementEvaluation::foul_risk)
+      .def_readonly("total_score", &ofc::PlacementEvaluation::total_score);
+
+  m.def(
+      "calculate_fl_probability",
+      [](const ofc::Board &board, ofc::CardMask remaining_deck,
+         int remaining_turns) {
+        return ofc::calculate_fl_probability(board, remaining_deck,
+                                             remaining_turns);
+      },
+      "Calculate Fantasy Land entry probability", py::arg("board"),
+      py::arg("remaining_deck"), py::arg("remaining_turns"));
+
+  m.def(
+      "evaluate_mcts_node",
+      [](const ofc::Board &board, ofc::CardMask remaining_deck,
+         int remaining_turns, float fl_weight) {
+        return ofc::evaluate_mcts_node(board, remaining_deck, remaining_turns,
+                                       fl_weight);
+      },
+      "Evaluate MCTS node with FL consideration", py::arg("board"),
+      py::arg("remaining_deck"), py::arg("remaining_turns"),
+      py::arg("fl_weight") = 0.5f);
+
+  m.def(
+      "evaluate_placement",
+      [](const ofc::Board &board, const ofc::Card &card, ofc::Row row,
+         ofc::CardMask remaining_deck, int remaining_turns) {
+        return ofc::evaluate_placement(board, card, row, remaining_deck,
+                                       remaining_turns);
+      },
+      "Evaluate a card placement action", py::arg("board"), py::arg("card"),
+      py::arg("row"), py::arg("remaining_deck"), py::arg("remaining_turns"));
+
+  m.def(
+      "monte_carlo_evaluation",
+      [](const ofc::Board &board, ofc::CardMask used_cards, int num_rollouts,
+         uint64_t seed) {
+        return ofc::monte_carlo_evaluation(board, used_cards, num_rollouts,
+                                           seed);
+      },
+      "Run Monte Carlo rollouts to evaluate board position", py::arg("board"),
+      py::arg("used_cards"), py::arg("num_rollouts") = 100,
+      py::arg("seed") = 12345);
+
+  m.def(
+      "calculate_fl_expected_score",
+      [](const std::vector<ofc::Card> &fl_cards, bool already_in_fl) {
+        return ofc::calculate_fl_expected_score(fl_cards, already_in_fl);
+      },
+      "Calculate expected score for Fantasy Land hand", py::arg("fl_cards"),
+      py::arg("already_in_fl") = true);
+
+  // MCTS関連定数
+  m.attr("FL_EXPECTED_SCORE_14") = ofc::FL_EXPECTED_SCORE_14;
+  m.attr("FL_EXPECTED_SCORE_15") = ofc::FL_EXPECTED_SCORE_15;
+  m.attr("FL_EXPECTED_SCORE_16") = ofc::FL_EXPECTED_SCORE_16;
+  m.attr("FL_EXPECTED_SCORE_17") = ofc::FL_EXPECTED_SCORE_17;
+  m.attr("FL_STAY_VALUE") = ofc::FL_STAY_VALUE;
 }

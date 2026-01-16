@@ -1,0 +1,801 @@
+--- Tactical Analysis: models/p7_mcts_1600000.zip ---
+
+Hand #1
+[player_1] Turn (Pick 2 from 3): 7s 5h 8c Jc Qd
+Resulting Board:
+Top:    [7s 5h Jc]
+Middle: [8c __ __ __ __]
+Bottom: [Qd __ __ __ __]
+[player_2] Turn (Pick 2 from 3): 7h Jh JK Ts 2h
+Resulting Board:
+Top:    [__ __ __]
+Middle: [7h Jh 2h __ __]
+Bottom: [JK Ts __ __ __]
+[player_0] Turn (Pick 2 from 3): Kh 6s 3d 4c 7d
+Resulting Board:
+Top:    [4c 7d __]
+Middle: [6s 3d __ __ __]
+Bottom: [Kh __ __ __ __]
+[player_1] Turn (Pick 2 from 3): 2d 5s 2c
+Resulting Board:
+Top:    [7s 5h Jc]
+Middle: [8c 2d __ __ __]
+Bottom: [Qd 5s __ __ __]
+[player_2] Turn (Pick 2 from 3): 6c Tc Qh
+Resulting Board:
+Top:    [Qh __ __]
+Middle: [7h Jh 2h Tc __]
+Bottom: [JK Ts __ __ __]
+[player_0] Turn (Pick 2 from 3): Ad 8s Ks
+Resulting Board:
+Top:    [4c 7d 8s]
+Middle: [6s 3d __ __ __]
+Bottom: [Kh Ad __ __ __]
+[player_1] Turn (Pick 2 from 3): 9d Kc 8h
+Resulting Board:
+Top:    [7s 5h Jc]
+Middle: [8c 2d 9d __ __]
+Bottom: [Qd 5s Kc __ __]
+[player_2] Turn (Pick 2 from 3): 2s 9s Qc
+Resulting Board:
+Top:    [Qh __ __]
+Middle: [7h Jh 2h Tc Qc]
+Bottom: [JK Ts 9s __ __]
+[player_0] Turn (Pick 2 from 3): 7c 6d 5c
+Resulting Board:
+Top:    [4c 7d 8s]
+Middle: [6s 3d __ __ __]
+Bottom: [Kh Ad 7c 5c __]
+[player_1] Turn (Pick 2 from 3): Ac As 3s
+Resulting Board:
+Top:    [7s 5h Jc]
+Middle: [8c 2d 9d As 3s]
+Bottom: [Qd 5s Kc __ __]
+[player_2] Turn (Pick 2 from 3): Jd Th 3h
+Resulting Board:
+Top:    [Qh 3h __]
+Middle: [7h Jh 2h Tc Qc]
+Bottom: [JK Ts 9s Th __]
+[player_0] Turn (Pick 2 from 3): 9c Qs Ah
+Resulting Board:
+Top:    [4c 7d 8s]
+Middle: [6s 3d 9c __ __]
+Bottom: [Kh Ad 7c 5c Qs]
+[player_1] Turn (Pick 2 from 3): 4d Js 8d
+Resulting Board:
+Top:    [7s 5h Jc]
+Middle: [8c 2d 9d As 3s]
+Bottom: [Qd 5s Kc 4d Js]
+[player_2] Turn (Pick 2 from 3): 5d 9h Kd
+Resulting Board:
+Top:    [Qh 3h 5d]
+Middle: [7h Jh 2h Tc Qc]
+Bottom: [JK Ts 9s Th Kd]
+[player_0] Turn (Pick 2 from 3): 4s Td 3c
+Resulting Board:
+Top:    [4c 7d 8s]
+Middle: [6s 3d 9c Td 3c]
+Bottom: [Kh Ad 7c 5c Qs]
+Player 0 Result: Score=-6, Foul=True, FL=False
+Player 1 Result: Score=-6, Foul=True, FL=False
+Player 2 Result: Score=12, Foul=False, FL=False
+
+Hand #2
+[player_1] Turn (Pick 2 from 3): Th 9h 6s 2s Kh
+Resulting Board:
+Top:    [Th 9h 2s]
+Middle: [6s __ __ __ __]
+Bottom: [Kh __ __ __ __]
+[player_2] Turn (Pick 2 from 3): 9c Td 2c Ts Jd
+Resulting Board:
+Top:    [9c Td Ts]
+Middle: [2c __ __ __ __]
+Bottom: [Jd __ __ __ __]
+[player_0] Turn (Pick 2 from 3): Tc Ks 6c 6h 7d
+Resulting Board:
+Top:    [6h 7d __]
+Middle: [Tc __ __ __ __]
+Bottom: [Ks 6c __ __ __]
+[player_1] Turn (Pick 2 from 3): 5h Qh 9d
+Resulting Board:
+Top:    [Th 9h 2s]
+Middle: [6s 5h Qh __ __]
+Bottom: [Kh __ __ __ __]
+[player_2] Turn (Pick 2 from 3): JK 6d JK
+Resulting Board:
+Top:    [9c Td Ts]
+Middle: [2c __ __ __ __]
+Bottom: [Jd JK JK __ __]
+[player_0] Turn (Pick 2 from 3): Qd 5c 8d
+Resulting Board:
+Top:    [6h 7d Qd]
+Middle: [Tc __ __ __ __]
+Bottom: [Ks 6c 5c __ __]
+[player_1] Turn (Pick 2 from 3): Qs Qc 3d
+Resulting Board:
+Top:    [Th 9h 2s]
+Middle: [6s 5h Qh Qs Qc]
+Bottom: [Kh __ __ __ __]
+[player_2] Turn (Pick 2 from 3): 2h 9s As
+Resulting Board:
+Top:    [9c Td Ts]
+Middle: [2c 2h 9s __ __]
+Bottom: [Jd JK JK __ __]
+[player_0] Turn (Pick 2 from 3): 3s Ad Jh
+Resulting Board:
+Top:    [6h 7d Qd]
+Middle: [Tc Ad __ __ __]
+Bottom: [Ks 6c 5c Jh __]
+[player_1] Turn (Pick 2 from 3): 2d 7s 8s
+Resulting Board:
+Top:    [Th 9h 2s]
+Middle: [6s 5h Qh Qs Qc]
+Bottom: [Kh 2d 8s __ __]
+[player_2] Turn (Pick 2 from 3): Ac 8h Js
+Resulting Board:
+Top:    [9c Td Ts]
+Middle: [2c 2h 9s Ac 8h]
+Bottom: [Jd JK JK __ __]
+[player_0] Turn (Pick 2 from 3): Kc 3c 4c
+Resulting Board:
+Top:    [6h 7d Qd]
+Middle: [Tc Ad Kc __ __]
+Bottom: [Ks 6c 5c Jh 4c]
+[player_1] Turn (Pick 2 from 3): Kd 4d 5s
+Resulting Board:
+Top:    [Th 9h 2s]
+Middle: [6s 5h Qh Qs Qc]
+Bottom: [Kh 2d 8s Kd 5s]
+[player_2] Turn (Pick 2 from 3): 8c 5d Jc
+Resulting Board:
+Top:    [9c Td Ts]
+Middle: [2c 2h 9s Ac 8h]
+Bottom: [Jd JK JK 5d Jc]
+[player_0] Turn (Pick 2 from 3): 7h 4s 3h
+Resulting Board:
+Top:    [6h 7d Qd]
+Middle: [Tc Ad Kc 7h 3h]
+Bottom: [Ks 6c 5c Jh 4c]
+Player 0 Result: Score=12, Foul=False, FL=False
+Player 1 Result: Score=-6, Foul=True, FL=False
+Player 2 Result: Score=-6, Foul=True, FL=False
+
+Hand #3
+[player_1] Turn (Pick 2 from 3): Th 3h 6d Tc 4s
+Resulting Board:
+Top:    [Th 3h Tc]
+Middle: [6d __ __ __ __]
+Bottom: [4s __ __ __ __]
+[player_2] Turn (Pick 2 from 3): 9d 5s Kd JK 7s
+Resulting Board:
+Top:    [Kd __ __]
+Middle: [9d 5s __ __ __]
+Bottom: [JK 7s __ __ __]
+[player_0] Turn (Pick 2 from 3): Js Td 2s 5h JK
+Resulting Board:
+Top:    [Js Td 5h]
+Middle: [2s __ __ __ __]
+Bottom: [JK __ __ __ __]
+[player_1] Turn (Pick 2 from 3): Kc 4h 6h
+Resulting Board:
+Top:    [Th 3h Tc]
+Middle: [6d __ __ __ __]
+Bottom: [4s Kc 6h __ __]
+[player_2] Turn (Pick 2 from 3): 4d Jh 9c
+Resulting Board:
+Top:    [Kd Jh __]
+Middle: [9d 5s 4d __ __]
+Bottom: [JK 7s __ __ __]
+[player_0] Turn (Pick 2 from 3): Kh 7h Ah
+Resulting Board:
+Top:    [Js Td 5h]
+Middle: [2s Kh __ __ __]
+Bottom: [JK 7h __ __ __]
+[player_1] Turn (Pick 2 from 3): 6s Qh Jd
+Resulting Board:
+Top:    [Th 3h Tc]
+Middle: [6d Qh __ __ __]
+Bottom: [4s Kc 6h Jd __]
+[player_2] Turn (Pick 2 from 3): 8c Qs 3c
+Resulting Board:
+Top:    [Kd Jh Qs]
+Middle: [9d 5s 4d 8c __]
+Bottom: [JK 7s __ __ __]
+[player_0] Turn (Pick 2 from 3): 6c 2c 9s
+Resulting Board:
+Top:    [Js Td 5h]
+Middle: [2s Kh 6c 2c __]
+Bottom: [JK 7h __ __ __]
+[player_1] Turn (Pick 2 from 3): Jc 3s 9h
+Resulting Board:
+Top:    [Th 3h Tc]
+Middle: [6d Qh Jc 9h __]
+Bottom: [4s Kc 6h Jd __]
+[player_2] Turn (Pick 2 from 3): As 3d 7c
+Resulting Board:
+Top:    [Kd Jh Qs]
+Middle: [9d 5s 4d 8c As]
+Bottom: [JK 7s 7c __ __]
+[player_0] Turn (Pick 2 from 3): 2d 8d Qd
+Resulting Board:
+Top:    [Js Td 5h]
+Middle: [2s Kh 6c 2c __]
+Bottom: [JK 7h 8d Qd __]
+[player_1] Turn (Pick 2 from 3): 7d Ad 4c
+Resulting Board:
+Top:    [Th 3h Tc]
+Middle: [6d Qh Jc 9h 4c]
+Bottom: [4s Kc 6h Jd 7d]
+[player_2] Turn (Pick 2 from 3): Ts 8h Ac
+Resulting Board:
+Top:    [Kd Jh Qs]
+Middle: [9d 5s 4d 8c As]
+Bottom: [JK 7s 7c Ts Ac]
+[player_0] Turn (Pick 2 from 3): 5d 5c Ks
+Resulting Board:
+Top:    [Js Td 5h]
+Middle: [2s Kh 6c 2c 5c]
+Bottom: [JK 7h 8d Qd Ks]
+Player 0 Result: Score=12, Foul=False, FL=False
+Player 1 Result: Score=-6, Foul=True, FL=False
+Player 2 Result: Score=-6, Foul=True, FL=False
+
+Hand #4
+[player_1] Turn (Pick 2 from 3): Qs Jd 2h Kd 2s
+Resulting Board:
+Top:    [Qs 2s __]
+Middle: [Jd 2h __ __ __]
+Bottom: [Kd __ __ __ __]
+[player_2] Turn (Pick 2 from 3): 7h Tc 7d 5c 7c
+Resulting Board:
+Top:    [5c 7c __]
+Middle: [Tc 7d __ __ __]
+Bottom: [7h __ __ __ __]
+[player_0] Turn (Pick 2 from 3): 4h JK 4c 2c 8d
+Resulting Board:
+Top:    [4h 4c __]
+Middle: [8d __ __ __ __]
+Bottom: [JK 2c __ __ __]
+[player_1] Turn (Pick 2 from 3): 6c Jc 9s
+Resulting Board:
+Top:    [Qs 2s Jc]
+Middle: [Jd 2h 9s __ __]
+Bottom: [Kd __ __ __ __]
+[player_2] Turn (Pick 2 from 3): 7s 6s 4d
+Resulting Board:
+Top:    [5c 7c __]
+Middle: [Tc 7d 4d __ __]
+Bottom: [7h 6s __ __ __]
+[player_0] Turn (Pick 2 from 3): Ad Js 9c
+Resulting Board:
+Top:    [4h 4c Js]
+Middle: [8d __ __ __ __]
+Bottom: [JK 2c Ad __ __]
+[player_1] Turn (Pick 2 from 3): Ks JK 9d
+Resulting Board:
+Top:    [Qs 2s Jc]
+Middle: [Jd 2h 9s Ks __]
+Bottom: [Kd JK __ __ __]
+[player_2] Turn (Pick 2 from 3): Kh 8s Qd
+Resulting Board:
+Top:    [5c 7c __]
+Middle: [Tc 7d 4d Kh __]
+Bottom: [7h 6s Qd __ __]
+[player_0] Turn (Pick 2 from 3): 6d Kc Td
+Resulting Board:
+Top:    [4h 4c Js]
+Middle: [8d 6d Td __ __]
+Bottom: [JK 2c Ad __ __]
+[player_1] Turn (Pick 2 from 3): 8h As 8c
+Resulting Board:
+Top:    [Qs 2s Jc]
+Middle: [Jd 2h 9s Ks 8h]
+Bottom: [Kd JK 8c __ __]
+[player_2] Turn (Pick 2 from 3): Ac Jh Qh
+Resulting Board:
+Top:    [5c 7c Ac]
+Middle: [Tc 7d 4d Kh Qh]
+Bottom: [7h 6s Qd __ __]
+[player_0] Turn (Pick 2 from 3): Ts Th 3h
+Resulting Board:
+Top:    [4h 4c Js]
+Middle: [8d 6d Td Ts 3h]
+Bottom: [JK 2c Ad __ __]
+[player_1] Turn (Pick 2 from 3): 2d Qc 5s
+Resulting Board:
+Top:    [Qs 2s Jc]
+Middle: [Jd 2h 9s Ks 8h]
+Bottom: [Kd JK 8c Qc 5s]
+[player_2] Turn (Pick 2 from 3): 9h 6h 4s
+Resulting Board:
+Top:    [5c 7c Ac]
+Middle: [Tc 7d 4d Kh Qh]
+Bottom: [7h 6s Qd 6h 4s]
+[player_0] Turn (Pick 2 from 3): 5d 5h 3d
+Resulting Board:
+Top:    [4h 4c Js]
+Middle: [8d 6d Td Ts 3h]
+Bottom: [JK 2c Ad 5h 3d]
+Player 0 Result: Score=16, Foul=False, FL=False
+Player 1 Result: Score=-6, Foul=False, FL=False
+Player 2 Result: Score=-10, Foul=False, FL=False
+
+Hand #5
+[player_1] Turn (Pick 2 from 3): 4h Ts 9h 6d 7h
+Resulting Board:
+Top:    [9h __ __]
+Middle: [4h Ts __ __ __]
+Bottom: [6d 7h __ __ __]
+[player_2] Turn (Pick 2 from 3): 8d Tc 9c Td Ks
+Resulting Board:
+Top:    [8d Tc Td]
+Middle: [9c __ __ __ __]
+Bottom: [Ks __ __ __ __]
+[player_0] Turn (Pick 2 from 3): 8s 6h 5d Js 4d
+Resulting Board:
+Top:    [8s 4d __]
+Middle: [6h 5d __ __ __]
+Bottom: [Js __ __ __ __]
+[player_1] Turn (Pick 2 from 3): 8c 2c 4c
+Resulting Board:
+Top:    [9h __ __]
+Middle: [4h Ts 4c __ __]
+Bottom: [6d 7h 8c __ __]
+[player_2] Turn (Pick 2 from 3): Kd Kc 9s
+Resulting Board:
+Top:    [8d Tc Td]
+Middle: [9c Kc __ __ __]
+Bottom: [Ks Kd __ __ __]
+[player_0] Turn (Pick 2 from 3): Jc 5c Ad
+Resulting Board:
+Top:    [8s 4d __]
+Middle: [6h 5d 5c Ad __]
+Bottom: [Js __ __ __ __]
+[player_1] Turn (Pick 2 from 3): 3h 9d Ah
+Resulting Board:
+Top:    [9h Ah __]
+Middle: [4h Ts 4c __ __]
+Bottom: [6d 7h 8c 9d __]
+[player_2] Turn (Pick 2 from 3): JK 5h 3c
+Resulting Board:
+Top:    [8d Tc Td]
+Middle: [9c Kc 3c __ __]
+Bottom: [Ks Kd JK __ __]
+[player_0] Turn (Pick 2 from 3): 7s Qc 7c
+Resulting Board:
+Top:    [8s 4d __]
+Middle: [6h 5d 5c Ad __]
+Bottom: [Js 7s 7c __ __]
+[player_1] Turn (Pick 2 from 3): 4s 2s 5s
+Resulting Board:
+Top:    [9h Ah 2s]
+Middle: [4h Ts 4c 4s __]
+Bottom: [6d 7h 8c 9d __]
+[player_2] Turn (Pick 2 from 3): As 2h Qs
+Resulting Board:
+Top:    [8d Tc Td]
+Middle: [9c Kc 3c As 2h]
+Bottom: [Ks Kd JK __ __]
+[player_0] Turn (Pick 2 from 3): 3s Jh Jd
+Resulting Board:
+Top:    [8s 4d Jh]
+Middle: [6h 5d 5c Ad __]
+Bottom: [Js 7s 7c Jd __]
+[player_1] Turn (Pick 2 from 3): Kh 2d Ac
+Resulting Board:
+Top:    [9h Ah 2s]
+Middle: [4h Ts 4c 4s Kh]
+Bottom: [6d 7h 8c 9d 2d]
+[player_2] Turn (Pick 2 from 3): JK Th 7d
+Resulting Board:
+Top:    [8d Tc Td]
+Middle: [9c Kc 3c As 2h]
+Bottom: [Ks Kd JK JK 7d]
+[player_0] Turn (Pick 2 from 3): 6c Qh Qd
+Resulting Board:
+Top:    [8s 4d Jh]
+Middle: [6h 5d 5c Ad Qh]
+Bottom: [Js 7s 7c Jd Qd]
+Player 0 Result: Score=12, Foul=False, FL=False
+Player 1 Result: Score=-6, Foul=True, FL=False
+Player 2 Result: Score=-6, Foul=True, FL=False
+
+Hand #6
+[player_1] Turn (Pick 2 from 3): 2s 9s 3h 3c Qs
+Resulting Board:
+Top:    [2s 9s 3c]
+Middle: [3h __ __ __ __]
+Bottom: [Qs __ __ __ __]
+[player_2] Turn (Pick 2 from 3): Kd 2d Js 4c 5c
+Resulting Board:
+Top:    [2d 4c 5c]
+Middle: [__ __ __ __ __]
+Bottom: [Kd Js __ __ __]
+[player_0] Turn (Pick 2 from 3): 8s Th Jh 8d JK
+Resulting Board:
+Top:    [8s Th 8d]
+Middle: [Jh __ __ __ __]
+Bottom: [JK __ __ __ __]
+[player_1] Turn (Pick 2 from 3): Jd Qh JK
+Resulting Board:
+Top:    [2s 9s 3c]
+Middle: [3h Jd __ __ __]
+Bottom: [Qs JK __ __ __]
+[player_2] Turn (Pick 2 from 3): Ks 6c 6h
+Resulting Board:
+Top:    [2d 4c 5c]
+Middle: [6c __ __ __ __]
+Bottom: [Kd Js 6h __ __]
+[player_0] Turn (Pick 2 from 3): Td Kc 6d
+Resulting Board:
+Top:    [8s Th 8d]
+Middle: [Jh Td __ __ __]
+Bottom: [JK Kc __ __ __]
+[player_1] Turn (Pick 2 from 3): 3d 2c 7s
+Resulting Board:
+Top:    [2s 9s 3c]
+Middle: [3h Jd 7s __ __]
+Bottom: [Qs JK 3d __ __]
+[player_2] Turn (Pick 2 from 3): Jc As 2h
+Resulting Board:
+Top:    [2d 4c 5c]
+Middle: [6c As __ __ __]
+Bottom: [Kd Js 6h 2h __]
+[player_0] Turn (Pick 2 from 3): Ts 5s 9d
+Resulting Board:
+Top:    [8s Th 8d]
+Middle: [Jh Td 9d __ __]
+Bottom: [JK Kc Ts __ __]
+[player_1] Turn (Pick 2 from 3): 4h Ad 9h
+Resulting Board:
+Top:    [2s 9s 3c]
+Middle: [3h Jd 7s Ad __]
+Bottom: [Qs JK 3d 9h __]
+[player_2] Turn (Pick 2 from 3): Ac 7h 7d
+Resulting Board:
+Top:    [2d 4c 5c]
+Middle: [6c As 7h __ __]
+Bottom: [Kd Js 6h 2h 7d]
+[player_0] Turn (Pick 2 from 3): 8c 4s Kh
+Resulting Board:
+Top:    [8s Th 8d]
+Middle: [Jh Td 9d Kh __]
+Bottom: [JK Kc Ts 8c __]
+[player_1] Turn (Pick 2 from 3): 3s 7c 5d
+Resulting Board:
+Top:    [2s 9s 3c]
+Middle: [3h Jd 7s Ad 3s]
+Bottom: [Qs JK 3d 9h 5d]
+[player_2] Turn (Pick 2 from 3): Qd Tc 9c
+Resulting Board:
+Top:    [2d 4c 5c]
+Middle: [6c As 7h Qd Tc]
+Bottom: [Kd Js 6h 2h 7d]
+[player_0] Turn (Pick 2 from 3): 4d 5h Qc
+Resulting Board:
+Top:    [8s Th 8d]
+Middle: [Jh Td 9d Kh Qc]
+Bottom: [JK Kc Ts 8c 4d]
+Player 0 Result: Score=-12, Foul=True, FL=False
+Player 1 Result: Score=12, Foul=False, FL=False
+Player 2 Result: Score=0, Foul=False, FL=False
+
+Hand #7
+[player_1] Turn (Pick 2 from 3): 4h Ac Qh Jd Qd
+Resulting Board:
+Top:    [4h Ac Jd]
+Middle: [Qh __ __ __ __]
+Bottom: [Qd __ __ __ __]
+[player_2] Turn (Pick 2 from 3): 9h 2d 3s 7s Qs
+Resulting Board:
+Top:    [9h Qs __]
+Middle: [2d 3s __ __ __]
+Bottom: [7s __ __ __ __]
+[player_0] Turn (Pick 2 from 3): 6d Qc 4s Th 4d
+Resulting Board:
+Top:    [6d 4d __]
+Middle: [Qc 4s __ __ __]
+Bottom: [Th __ __ __ __]
+[player_1] Turn (Pick 2 from 3): Jh Ks Jc
+Resulting Board:
+Top:    [4h Ac Jd]
+Middle: [Qh __ __ __ __]
+Bottom: [Qd Jh Jc __ __]
+[player_2] Turn (Pick 2 from 3): 8c Js 7c
+Resulting Board:
+Top:    [9h Qs __]
+Middle: [2d 3s 7c __ __]
+Bottom: [7s 8c __ __ __]
+[player_0] Turn (Pick 2 from 3): 4c JK Kc
+Resulting Board:
+Top:    [6d 4d __]
+Middle: [Qc 4s Kc __ __]
+Bottom: [Th JK __ __ __]
+[player_1] Turn (Pick 2 from 3): 2s JK 8d
+Resulting Board:
+Top:    [4h Ac Jd]
+Middle: [Qh 2s __ __ __]
+Bottom: [Qd Jh Jc JK __]
+[player_2] Turn (Pick 2 from 3): Ts 3c Ah
+Resulting Board:
+Top:    [9h Qs 3c]
+Middle: [2d 3s 7c Ts __]
+Bottom: [7s 8c __ __ __]
+[player_0] Turn (Pick 2 from 3): 9c Ad 9s
+Resulting Board:
+Top:    [6d 4d __]
+Middle: [Qc 4s Kc __ __]
+Bottom: [Th JK Ad 9s __]
+[player_1] Turn (Pick 2 from 3): 9d 6s 8h
+Resulting Board:
+Top:    [4h Ac Jd]
+Middle: [Qh 2s 9d 8h __]
+Bottom: [Qd Jh Jc JK __]
+[player_2] Turn (Pick 2 from 3): 5s 5d As
+Resulting Board:
+Top:    [9h Qs 3c]
+Middle: [2d 3s 7c Ts 5s]
+Bottom: [7s 8c As __ __]
+[player_0] Turn (Pick 2 from 3): Tc 6h Kd
+Resulting Board:
+Top:    [6d 4d __]
+Middle: [Qc 4s Kc 6h __]
+Bottom: [Th JK Ad 9s Kd]
+[player_1] Turn (Pick 2 from 3): 7h Td 5c
+Resulting Board:
+Top:    [4h Ac Jd]
+Middle: [Qh 2s 9d 8h 7h]
+Bottom: [Qd Jh Jc JK 5c]
+[player_2] Turn (Pick 2 from 3): Kh 7d 2c
+Resulting Board:
+Top:    [9h Qs 3c]
+Middle: [2d 3s 7c Ts 5s]
+Bottom: [7s 8c As Kh 2c]
+[player_0] Turn (Pick 2 from 3): 5h 3h 8s
+Resulting Board:
+Top:    [6d 4d 5h]
+Middle: [Qc 4s Kc 6h 8s]
+Bottom: [Th JK Ad 9s Kd]
+Player 0 Result: Score=5, Foul=False, FL=False
+Player 1 Result: Score=7, Foul=False, FL=False
+Player 2 Result: Score=-12, Foul=True, FL=False
+
+Hand #8
+[player_1] Turn (Pick 2 from 3): Jd 7c Kc 6s 9h
+Resulting Board:
+Top:    [Jd 7c 6s]
+Middle: [Kc __ __ __ __]
+Bottom: [9h __ __ __ __]
+[player_2] Turn (Pick 2 from 3): 2s Js JK 4h Jh
+Resulting Board:
+Top:    [4h Jh __]
+Middle: [JK __ __ __ __]
+Bottom: [2s Js __ __ __]
+[player_0] Turn (Pick 2 from 3): 9d 2d 5s As Kh
+Resulting Board:
+Top:    [9d 2d As]
+Middle: [5s __ __ __ __]
+Bottom: [Kh __ __ __ __]
+[player_1] Turn (Pick 2 from 3): 4c 6c 6d
+Resulting Board:
+Top:    [Jd 7c 6s]
+Middle: [Kc 6c 6d __ __]
+Bottom: [9h __ __ __ __]
+[player_2] Turn (Pick 2 from 3): Qs 8s 2h
+Resulting Board:
+Top:    [4h Jh __]
+Middle: [JK 2h __ __ __]
+Bottom: [2s Js Qs __ __]
+[player_0] Turn (Pick 2 from 3): 8d 9s 3c
+Resulting Board:
+Top:    [9d 2d As]
+Middle: [5s 8d __ __ __]
+Bottom: [Kh 9s __ __ __]
+[player_1] Turn (Pick 2 from 3): Ks 3s 7h
+Resulting Board:
+Top:    [Jd 7c 6s]
+Middle: [Kc 6c 6d __ __]
+Bottom: [9h Ks 7h __ __]
+[player_2] Turn (Pick 2 from 3): 4s Ad 9c
+Resulting Board:
+Top:    [4h Jh Ad]
+Middle: [JK 2h 9c __ __]
+Bottom: [2s Js Qs __ __]
+[player_0] Turn (Pick 2 from 3): 3h Tc 5h
+Resulting Board:
+Top:    [9d 2d As]
+Middle: [5s 8d 3h __ __]
+Bottom: [Kh 9s Tc __ __]
+[player_1] Turn (Pick 2 from 3): 3d 8h Ac
+Resulting Board:
+Top:    [Jd 7c 6s]
+Middle: [Kc 6c 6d 8h Ac]
+Bottom: [9h Ks 7h __ __]
+[player_2] Turn (Pick 2 from 3): Td 2c Jc
+Resulting Board:
+Top:    [4h Jh Ad]
+Middle: [JK 2h 9c Jc __]
+Bottom: [2s Js Qs Td __]
+[player_0] Turn (Pick 2 from 3): Kd 5d JK
+Resulting Board:
+Top:    [9d 2d As]
+Middle: [5s 8d 3h Kd __]
+Bottom: [Kh 9s Tc JK __]
+[player_1] Turn (Pick 2 from 3): 8c 4d 5c
+Resulting Board:
+Top:    [Jd 7c 6s]
+Middle: [Kc 6c 6d 8h Ac]
+Bottom: [9h Ks 7h 4d 5c]
+[player_2] Turn (Pick 2 from 3): Ts Qc 7d
+Resulting Board:
+Top:    [4h Jh Ad]
+Middle: [JK 2h 9c Jc 7d]
+Bottom: [2s Js Qs Td Ts]
+[player_0] Turn (Pick 2 from 3): Ah Th 7s
+Resulting Board:
+Top:    [9d 2d As]
+Middle: [5s 8d 3h Kd Ah]
+Bottom: [Kh 9s Tc JK Th]
+Player 0 Result: Score=12, Foul=False, FL=False
+Player 1 Result: Score=-6, Foul=True, FL=False
+Player 2 Result: Score=-6, Foul=True, FL=False
+
+Hand #9
+[player_1] Turn (Pick 2 from 3): 8d Jh 6c 3d Jd
+Resulting Board:
+Top:    [8d Jh 3d]
+Middle: [6c __ __ __ __]
+Bottom: [Jd __ __ __ __]
+[player_2] Turn (Pick 2 from 3): Js 5h 5d Td 4s
+Resulting Board:
+Top:    [Js 5h Td]
+Middle: [5d __ __ __ __]
+Bottom: [4s __ __ __ __]
+[player_0] Turn (Pick 2 from 3): 7h Ks 8c 3c JK
+Resulting Board:
+Top:    [3c JK __]
+Middle: [7h __ __ __ __]
+Bottom: [Ks 8c __ __ __]
+[player_1] Turn (Pick 2 from 3): 6h Ad Qc
+Resulting Board:
+Top:    [8d Jh 3d]
+Middle: [6c Ad __ __ __]
+Bottom: [Jd 6h __ __ __]
+[player_2] Turn (Pick 2 from 3): Ah 2h As
+Resulting Board:
+Top:    [Js 5h Td]
+Middle: [5d As __ __ __]
+Bottom: [4s Ah __ __ __]
+[player_0] Turn (Pick 2 from 3): 6s 9s Tc
+Resulting Board:
+Top:    [3c JK 9s]
+Middle: [7h 6s __ __ __]
+Bottom: [Ks 8c __ __ __]
+[player_1] Turn (Pick 2 from 3): Kh 2s 5c
+Resulting Board:
+Top:    [8d Jh 3d]
+Middle: [6c Ad 5c __ __]
+Bottom: [Jd 6h Kh __ __]
+[player_2] Turn (Pick 2 from 3): Th 4h Ts
+Resulting Board:
+Top:    [Js 5h Td]
+Middle: [5d As __ __ __]
+Bottom: [4s Ah Th Ts __]
+[player_0] Turn (Pick 2 from 3): 4c 2c 8s
+Resulting Board:
+Top:    [3c JK 9s]
+Middle: [7h 6s 4c __ __]
+Bottom: [Ks 8c 2c __ __]
+[player_1] Turn (Pick 2 from 3): Qd 6d 7d
+Resulting Board:
+Top:    [8d Jh 3d]
+Middle: [6c Ad 5c 6d __]
+Bottom: [Jd 6h Kh Qd __]
+[player_2] Turn (Pick 2 from 3): 3h Ac 4d
+Resulting Board:
+Top:    [Js 5h Td]
+Middle: [5d As Ac 4d __]
+Bottom: [4s Ah Th Ts __]
+[player_0] Turn (Pick 2 from 3): Qs 3s 8h
+Resulting Board:
+Top:    [3c JK 9s]
+Middle: [7h 6s 4c 3s __]
+Bottom: [Ks 8c 2c Qs __]
+[player_1] Turn (Pick 2 from 3): 9d Kc 7s
+Resulting Board:
+Top:    [8d Jh 3d]
+Middle: [6c Ad 5c 6d 9d]
+Bottom: [Jd 6h Kh Qd Kc]
+[player_2] Turn (Pick 2 from 3): Jc Kd 9c
+Resulting Board:
+Top:    [Js 5h Td]
+Middle: [5d As Ac 4d Kd]
+Bottom: [4s Ah Th Ts Jc]
+[player_0] Turn (Pick 2 from 3): 7c Qh JK
+Resulting Board:
+Top:    [3c JK 9s]
+Middle: [7h 6s 4c 3s Qh]
+Bottom: [Ks 8c 2c Qs JK]
+Player 0 Result: Score=-12, Foul=True, FL=False
+Player 1 Result: Score=8, Foul=False, FL=False
+Player 2 Result: Score=4, Foul=False, FL=False
+
+Hand #10
+[player_1] Turn (Pick 2 from 3): Qh Ks 3d 7c 2d
+Resulting Board:
+Top:    [Qh 3d __]
+Middle: [2d __ __ __ __]
+Bottom: [Ks 7c __ __ __]
+[player_2] Turn (Pick 2 from 3): 2c 5s Kh 9d 5d
+Resulting Board:
+Top:    [2c 5s 9d]
+Middle: [Kh __ __ __ __]
+Bottom: [5d __ __ __ __]
+[player_0] Turn (Pick 2 from 3): Jh 7h 7s Kd Ah
+Resulting Board:
+Top:    [Jh Ah __]
+Middle: [7h 7s __ __ __]
+Bottom: [Kd __ __ __ __]
+[player_1] Turn (Pick 2 from 3): 5c 8s 3h
+Resulting Board:
+Top:    [Qh 3d 8s]
+Middle: [2d __ __ __ __]
+Bottom: [Ks 7c 5c __ __]
+[player_2] Turn (Pick 2 from 3): Td Jc Qc
+Resulting Board:
+Top:    [2c 5s 9d]
+Middle: [Kh Td __ __ __]
+Bottom: [5d Jc __ __ __]
+[player_0] Turn (Pick 2 from 3): 4s 2s 8h
+Resulting Board:
+Top:    [Jh Ah 2s]
+Middle: [7h 7s __ __ __]
+Bottom: [Kd 4s __ __ __]
+[player_1] Turn (Pick 2 from 3): 7d As 4h
+Resulting Board:
+Top:    [Qh 3d 8s]
+Middle: [2d 7d 4h __ __]
+Bottom: [Ks 7c 5c __ __]
+[player_2] Turn (Pick 2 from 3): 8c Ad Qd
+Resulting Board:
+Top:    [2c 5s 9d]
+Middle: [Kh Td Ad __ __]
+Bottom: [5d Jc Qd __ __]
+[player_0] Turn (Pick 2 from 3): Th 5h 9c
+Resulting Board:
+Top:    [Jh Ah 2s]
+Middle: [7h 7s 9c __ __]
+Bottom: [Kd 4s Th __ __]
+[player_1] Turn (Pick 2 from 3): 4c Jd Tc
+Resulting Board:
+Top:    [Qh 3d 8s]
+Middle: [2d 7d 4h Jd Tc]
+Bottom: [Ks 7c 5c __ __]
+[player_2] Turn (Pick 2 from 3): 8d Ts JK
+Resulting Board:
+Top:    [2c 5s 9d]
+Middle: [Kh Td Ad __ __]
+Bottom: [5d Jc Qd Ts JK]
+[player_0] Turn (Pick 2 from 3): 6d Js Ac
+Resulting Board:
+Top:    [Jh Ah 2s]
+Middle: [7h 7s 9c 6d Ac]
+Bottom: [Kd 4s Th __ __]
+[player_1] Turn (Pick 2 from 3): 6h JK 3s
+Resulting Board:
+Top:    [Qh 3d 8s]
+Middle: [2d 7d 4h Jd Tc]
+Bottom: [Ks 7c 5c JK 3s]
+[player_2] Turn (Pick 2 from 3): 6c 9h 6s
+Resulting Board:
+Top:    [2c 5s 9d]
+Middle: [Kh Td Ad 6c 6s]
+Bottom: [5d Jc Qd Ts JK]
+[player_0] Turn (Pick 2 from 3): Kc Qs 9s
+Resulting Board:
+Top:    [Jh Ah 2s]
+Middle: [7h 7s 9c 6d Ac]
+Bottom: [Kd 4s Th Kc 9s]
+Player 0 Result: Score=12, Foul=False, FL=False
+Player 1 Result: Score=-12, Foul=True, FL=False
+Player 2 Result: Score=0, Foul=False, FL=False

@@ -22,18 +22,22 @@ def evaluate(model_paths, num_games=1000):
         entered_fl = 0
         
         for _ in range(num_games):
-            obs, info = env.reset()
-            done = False
-            while not done:
-                action_masks = env.action_masks()
-                action, _ = model.predict(obs, action_masks=action_masks, deterministic=True)
-                obs, reward, done, truncated, info = env.step(action)
-            
-            if info['fouled']:
-                fouls += 1
-            total_royalty += info['royalty']
-            if info['entered_fl']:
-                entered_fl += 1
+            try:
+                obs, info = env.reset()
+                done = False
+                while not done:
+                    action_masks = env.action_masks()
+                    action, _ = model.predict(obs, action_masks=action_masks, deterministic=True)
+                    obs, reward, done, truncated, info = env.step(action)
+                
+                if info['fouled']:
+                    fouls += 1
+                total_royalty += info['royalty']
+                if info['entered_fl']:
+                    entered_fl += 1
+            except ValueError as e:
+                print(f"  [Warning] Game failed with error: {e}")
+                continue
                 
         results.append({
             'name': model_path.split('/')[-1],
