@@ -70,7 +70,9 @@ class TrainingNotifier:
         message += f"```\n"
         message += f"Games: {metrics.get('games', 0):,}\n"
         message += f"Foul Rate: {metrics.get('foul_rate', 0):.1f}%\n"
-        message += f"Mean Royalty: {metrics.get('mean_score', 0):.2f}\n"
+        message += f"Mean Score: {metrics.get('mean_score', 0):+.2f}\n"
+        message += f"Mean Royalty: {metrics.get('mean_royalty', 0):.2f}\n"
+        message += f"Win Rate: {metrics.get('win_rate', 0):.1f}%\n"
         message += f"FPS: {metrics.get('fps', 0):.0f}\n"
         message += f"```"
         
