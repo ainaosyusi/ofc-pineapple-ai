@@ -159,6 +159,7 @@ PYBIND11_MODULE(ofc_engine, m) {
       .def_readwrite("board", &ofc::PlayerState::board)
       .def_readonly("hand_count", &ofc::PlayerState::hand_count)
       .def_readonly("in_fantasy_land", &ofc::PlayerState::in_fantasy_land)
+      .def_readonly("fl_cards_to_receive", &ofc::PlayerState::fl_cards_to_receive)
       .def("get_hand", [](const ofc::PlayerState &ps) {
         if (!ps.fl_hand.empty())
           return ps.fl_hand;
@@ -235,6 +236,20 @@ PYBIND11_MODULE(ofc_engine, m) {
              }
              e.start_with_fl(rng, fl_array);
            })
+      .def("start_with_fl_cards",
+           [](ofc::GameEngine &e, uint64_t seed, std::vector<int> fl_cards) {
+             // Ultimate Rules: FL枚数を指定して開始
+             // fl_cards[p] = 0: 通常, 14-17: FL枚数
+             ofc::FastRNG rng(seed);
+             std::array<int, ofc::MAX_PLAYERS> fl_array = {0};
+             for (size_t i = 0;
+                  i < std::min(fl_cards.size(), (size_t)ofc::MAX_PLAYERS);
+                  ++i) {
+               fl_array[i] = fl_cards[i];
+             }
+             e.start_with_fl_cards(rng, fl_array);
+           },
+           "Start game with FL card counts (Ultimate Rules: QQ=14, KK=15, AA=16, Trips=17)")
       .def("apply_initial_action", &ofc::GameEngine::apply_initial_action)
       .def("apply_turn_action", &ofc::GameEngine::apply_turn_action)
       .def("apply_fl_action", &ofc::GameEngine::apply_fl_action)

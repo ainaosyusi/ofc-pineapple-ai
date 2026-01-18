@@ -188,17 +188,22 @@ class RuleBasedTeacher:
 
 class TeacherLearningEnv(gym.Env):
     """
-    教師学習用環境
+    教師学習用環境（FL対応）
 
     報酬設計:
     - 基本報酬: ゲームスコア
     - 教師一致ボーナス: 教師の選択と一致した場合 +bonus
     - 教師ボーナスは学習が進むと減衰
+    - FL突入/継続ボーナス
+
+    FL対応:
+    - enable_fl_turns=Trueで相手のFLターンを実装
+    - FLプレイヤーはFantasySolverで最適配置
     """
 
-    def __init__(self, env_id: int = 0, teacher_bonus: float = 5.0):
+    def __init__(self, env_id: int = 0, teacher_bonus: float = 5.0, enable_fl_turns: bool = True):
         super().__init__()
-        self.env = OFC3MaxEnv()
+        self.env = OFC3MaxEnv(enable_fl_turns=enable_fl_turns, continuous_games=False)
         self.env_id = env_id
         self.learning_agent = "player_0"
         self.teacher = RuleBasedTeacher()
@@ -208,6 +213,8 @@ class TeacherLearningEnv(gym.Env):
 
         # 教師学習パラメータ
         self.teacher_bonus = teacher_bonus
+        self.fl_bonus = 15.0  # FL突入ボーナス
+        self.fl_stay_bonus = 10.0  # FL継続ボーナス
         self.teacher_matches = 0
         self.total_decisions = 0
 
@@ -268,13 +275,18 @@ class TeacherLearningEnv(gym.Env):
             royalty = result.get_royalty(0)
             fouled = result.is_fouled(0)
             entered_fl = result.entered_fl(0)
+            stayed_fl = result.stayed_fl(0)
 
             # 基本報酬
             reward = base_score
 
             # FL突入ボーナス
             if entered_fl:
-                reward += 15.0
+                reward += self.fl_bonus
+
+            # FL継続ボーナス
+            if stayed_fl:
+                reward += self.fl_stay_bonus
 
             # 教師一致率に基づくボーナス
             match_rate = self.teacher_matches / max(1, self.total_decisions)
@@ -285,6 +297,7 @@ class TeacherLearningEnv(gym.Env):
                 'royalty': royalty,
                 'fouled': fouled,
                 'entered_fl': entered_fl,
+                'stayed_fl': stayed_fl,
                 'variant': 'teacher',
                 'teacher_match_rate': match_rate * 100,
                 'win': base_score > 0,
