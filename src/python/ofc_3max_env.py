@@ -1,12 +1,16 @@
 """
 OFC Pineapple AI - 3-Max Multi-Agent Environment
-PettingZoo互換の3人対戦環境 (Phase 5)
+PettingZoo互換の3人対戦環境 (Phase 8)
 
 特徴:
 - 3人プレイヤー (player_0, player_1, player_2)
 - 相手の捨て札は見えない設計
 - ポジション（ボタン）情報を観測に含む
 - 自分の捨て札履歴を追跡
+- Fantasy Land (FL) ターンをフル実装
+  - FL突入プレイヤーは14-17枚を一度に配置
+  - FantasySolverによる最適配置
+  - 連続ゲームでFL状態を引き継ぎ
 """
 
 import functools
@@ -55,35 +59,54 @@ class OFC3MaxEnv(AECEnv):
     BOT_SIZE = 5
     TOTAL_SLOTS = 13
     
-    def __init__(self, render_mode=None):
+    def __init__(self, render_mode=None, enable_fl_turns=True, continuous_games=False):
+        """
+        OFC 3-Max環境の初期化
+
+        Args:
+            render_mode: 描画モード ('human' or None)
+            enable_fl_turns: FLターンを有効にするか (Trueの場合、FL突入者は最適配置)
+            continuous_games: 連続ゲームモード (FL状態を引き継ぐ)
+        """
         super().__init__()
-        
+
         self.render_mode = render_mode
-        
+        self.enable_fl_turns = enable_fl_turns
+        self.continuous_games = continuous_games
+
         # プレイヤー設定（3人）
         self.possible_agents = ["player_0", "player_1", "player_2"]
         self.agent_name_mapping = {agent: i for i, agent in enumerate(self.possible_agents)}
-        
+
         # ゲームエンジン（3人対戦）
         self.engine = ofc.GameEngine(self.NUM_PLAYERS)
         self.rng_seed = None
-        
+
         # ターン情報
         self.current_street = 1
-        
+
         # ボタン位置（ゲームごとに回転）
         self.button_position = 0
-        
+
         # 各プレイヤーの捨て札履歴
-        self.player_discards = {agent: np.zeros(self.NUM_CARDS, dtype=np.int8) 
+        self.player_discards = {agent: np.zeros(self.NUM_CARDS, dtype=np.int8)
                                 for agent in self.possible_agents}
-        
+
+        # FL状態の追跡（連続ゲーム用）
+        self.fl_status = {agent: False for agent in self.possible_agents}
+        self.fl_cards_count = {agent: 0 for agent in self.possible_agents}
+
+        # FL統計
+        self.fl_games_played = 0
+        self.fl_entries_total = 0
+        self.fl_stays_total = 0
+
         # アクション空間（5枚配置: 3^5 = 243）
         self._action_spaces = {
             agent: spaces.Discrete(243) for agent in self.possible_agents
         }
-        
-        # 観測空間
+
+        # 観測空間 (FL手札スロット追加: 17枚分)
         self._observation_spaces = {
             agent: spaces.Dict({
                 'my_board': spaces.MultiBinary(3 * self.NUM_CARDS),          # 162
@@ -97,9 +120,9 @@ class OFC3MaxEnv(AECEnv):
                 'position_info': spaces.MultiBinary(self.NUM_PLAYERS),       # 3 (one-hot)
                 'game_state': spaces.Box(
                     low=0,
-                    high=np.array([5, 3, 5, 5, 3, 5, 5, 3, 5, 5, 1], dtype=np.float32),
+                    high=np.array([5, 3, 5, 5, 3, 5, 5, 3, 5, 5, 1, 17, 1, 1], dtype=np.float32),
                     dtype=np.float32
-                ),
+                ),  # 追加: FL手札枚数, FL中フラグ (next/prev)
             }) for agent in self.possible_agents
         }
     
@@ -145,7 +168,7 @@ class OFC3MaxEnv(AECEnv):
             self.rng_seed = seed
         else:
             self.rng_seed = np.random.randint(0, 2**32)
-        
+
         # エージェント状態
         self.agents = self.possible_agents[:]
         self.rewards = {agent: 0 for agent in self.agents}
@@ -153,31 +176,104 @@ class OFC3MaxEnv(AECEnv):
         self.terminations = {agent: False for agent in self.agents}
         self.truncations = {agent: False for agent in self.agents}
         self.infos = {agent: {} for agent in self.agents}
-        
+
         # 捨て札履歴をリセット
-        self.player_discards = {agent: np.zeros(self.NUM_CARDS, dtype=np.int8) 
+        self.player_discards = {agent: np.zeros(self.NUM_CARDS, dtype=np.int8)
                                 for agent in self.possible_agents}
-        
+
         # ゲームエンジンをリセット
         self.engine.reset()
-        self.engine.start_new_game(self.rng_seed)
-        
+
+        # FL状態の引き継ぎ処理
+        if self.continuous_games and any(self.fl_cards_count[a] > 0 for a in self.possible_agents):
+            # Ultimate Rules: FL枚数を指定して開始
+            # QQ=14, KK=15, AA=16, Trips=17
+            fl_cards_array = [self.fl_cards_count[agent] for agent in self.possible_agents]
+            self.engine.start_with_fl_cards(self.rng_seed, fl_cards_array)
+            self.fl_games_played += 1
+        else:
+            # 通常のゲーム開始
+            self.engine.start_new_game(self.rng_seed)
+            # FL状態をリセット
+            self.fl_status = {agent: False for agent in self.possible_agents}
+            self.fl_cards_count = {agent: 0 for agent in self.possible_agents}
+
         self.current_street = 1
-        
+
         # ボタン設定
         if options and 'button_position' in options:
             self.button_position = options['button_position']
-        
+        elif self.continuous_games and hasattr(self, '_game_count'):
+            # 連続ゲームモードでは自動的にボタンを回転
+            self.rotate_button()
+
+        # ゲームカウント（ボタン回転用）
+        if not hasattr(self, '_game_count'):
+            self._game_count = 0
+        self._game_count += 1
+
+        # FLプレイヤーの自動処理（enable_fl_turnsがTrueの場合）
+        if self.enable_fl_turns:
+            self._process_fl_players()
+
         # ターン管理（ボタンの左隣から開始）
+        # FLプレイヤーはスキップ（既にボードが完成）
         start_idx = (self.button_position + 1) % self.NUM_PLAYERS
-        ordered_agents = [self.possible_agents[(start_idx + i) % self.NUM_PLAYERS] 
-                          for i in range(self.NUM_PLAYERS)]
-        
+        ordered_agents = []
+        for i in range(self.NUM_PLAYERS):
+            agent = self.possible_agents[(start_idx + i) % self.NUM_PLAYERS]
+            player_idx = self.agent_name_mapping[agent]
+            ps = self.engine.player(player_idx)
+            # FLプレイヤー以外を順序に追加
+            if not ps.in_fantasy_land:
+                ordered_agents.append(agent)
+
+        # 全員がFLの場合は空のリスト（すぐにショーダウン）
+        if not ordered_agents:
+            ordered_agents = [self.possible_agents[0]]  # ダミー（即終了）
+
         self._agent_selector = AgentSelector(ordered_agents)
         self.agent_selection = self._agent_selector.next()
-        
+
         # 観測を設定
         self.observations = {agent: self._get_observation(agent) for agent in self.agents}
+
+    def _process_fl_players(self):
+        """FLプレイヤーをFantasySolverで自動処理"""
+        for i, agent in enumerate(self.possible_agents):
+            ps = self.engine.player(i)
+            fl_cards = ps.get_hand()  # FLの場合はFL手札が返される
+            if ps.in_fantasy_land and len(fl_cards) >= 14:
+                # FantasySolverで最適配置を取得
+                try:
+                    solution = ofc.solve_fantasy_land(fl_cards, already_in_fl=True)
+
+                    # FLActionを作成
+                    fl_action = ofc.FLAction()
+                    rows = [ofc.TOP, ofc.MIDDLE, ofc.BOTTOM]
+
+                    # Top (3枚)
+                    for j, card in enumerate(solution.top[:3]):
+                        fl_action.set_placement(j, card, ofc.TOP)
+
+                    # Middle (5枚)
+                    for j, card in enumerate(solution.mid[:5]):
+                        fl_action.set_placement(3 + j, card, ofc.MIDDLE)
+
+                    # Bottom (5枚)
+                    for j, card in enumerate(solution.bot[:5]):
+                        fl_action.set_placement(8 + j, card, ofc.BOTTOM)
+
+                    # 捨て札
+                    fl_action.discards = solution.discards
+
+                    # アクション適用
+                    self.engine.apply_fl_action(i, fl_action)
+
+                    # FL統計を記録
+                    self.fl_cards_count[agent] = len(fl_cards)
+                except Exception as e:
+                    print(f"[FL] Error processing FL for {agent}: {e}")
     
     def step(self, action):
         """アクションを実行"""
@@ -218,13 +314,22 @@ class OFC3MaxEnv(AECEnv):
         if not all(self.terminations.values()):
             prev_street = self.current_street
             self.current_street = self.engine.current_turn()
-            
+
             if self.current_street > prev_street:
+                # FLプレイヤーを除外してターン順を作成
                 start_idx = (self.button_position + 1) % self.NUM_PLAYERS
-                ordered_agents = [self.possible_agents[(start_idx + i) % self.NUM_PLAYERS] 
-                                  for i in range(self.NUM_PLAYERS)]
-                self._agent_selector = AgentSelector(ordered_agents)
-                self.agent_selection = self._agent_selector.next()
+                ordered_agents = []
+                for i in range(self.NUM_PLAYERS):
+                    agent = self.possible_agents[(start_idx + i) % self.NUM_PLAYERS]
+                    player_idx = self.agent_name_mapping[agent]
+                    ps = self.engine.player(player_idx)
+                    # FLプレイヤー以外を順序に追加
+                    if not ps.in_fantasy_land:
+                        ordered_agents.append(agent)
+
+                if ordered_agents:
+                    self._agent_selector = AgentSelector(ordered_agents)
+                    self.agent_selection = self._agent_selector.next()
             else:
                 self.agent_selection = self._agent_selector.next()
     
@@ -306,11 +411,51 @@ class OFC3MaxEnv(AECEnv):
         result = self.engine.result()
         for i, agent in enumerate(self.possible_agents):
             score = float(result.get_score(i))
+            royalty = result.get_royalty(i)
+            entered_fl = result.entered_fl(i)
+            stayed_fl = result.stayed_fl(i)
+            fouled = result.is_fouled(i)
+
             # FL突入ボーナス (Phase 8用強化: Superhuman Strategy)
             # Top QQ+ でFLに入った瞬間に +15.0 の巨大な報酬を与える
-            if result.entered_fl(i):
+            if entered_fl:
                 score += 15.0
+                self.fl_entries_total += 1
+
+            # FL継続ボーナス (連続ゲームでFLを維持)
+            if stayed_fl:
+                score += 10.0
+                self.fl_stays_total += 1
+
             self.rewards[agent] = score
+
+            # 次のゲーム用にFL状態を保存（連続ゲームモード）
+            if self.continuous_games:
+                # FL突入またはFL継続した場合、次もFLで開始
+                self.fl_status[agent] = entered_fl or stayed_fl
+
+                # Ultimate Rules: TopハンドによりFL枚数を決定
+                # QQ=14, KK=15, AA=16, Trips=17
+                if entered_fl or stayed_fl:
+                    ps = self.engine.player(i)
+                    top_eval = ps.board.evaluate_top()
+                    self.fl_cards_count[agent] = ofc.fantasy_land_cards(top_eval)
+                else:
+                    self.fl_cards_count[agent] = 0
+
+            # 詳細情報を保存
+            self.infos[agent] = {
+                'score': float(result.get_score(i)),
+                'royalty': royalty,
+                'fouled': fouled,
+                'entered_fl': entered_fl,
+                'stayed_fl': stayed_fl,
+                'was_in_fl': self.engine.player(i).in_fantasy_land,
+                'fl_cards_next': self.fl_cards_count[agent],  # Ultimate Rules: 次ゲームのFL枚数
+                'win': score > 0,
+                'loss': score < 0,
+                'draw': abs(score) < 0.001
+            }
     
     def _get_observation(self, agent):
         """エージェントの観測を取得"""
@@ -352,7 +497,10 @@ class OFC3MaxEnv(AECEnv):
         position_info = np.zeros(self.NUM_PLAYERS, dtype=np.int8)
         position_info[position] = 1
         
-        # ゲーム状態
+        # ゲーム状態（FL情報を追加）
+        # FL手札枚数を取得（通常は0-5、FL中は14-17）
+        hand = ps.get_hand()
+        fl_hand_count = len(hand) if ps.in_fantasy_land else 0
         game_state = np.array([
             self.current_street,
             ps.board.count(ofc.TOP),
@@ -364,7 +512,10 @@ class OFC3MaxEnv(AECEnv):
             prev_ps.board.count(ofc.TOP),
             prev_ps.board.count(ofc.MIDDLE),
             prev_ps.board.count(ofc.BOTTOM),
-            1 if ps.in_fantasy_land else 0
+            1 if ps.in_fantasy_land else 0,
+            fl_hand_count,  # FL手札枚数
+            1 if next_ps.in_fantasy_land else 0,  # 下家がFL中か
+            1 if prev_ps.in_fantasy_land else 0,  # 上家がFL中か
         ], dtype=np.float32)
         
         return {
@@ -427,8 +578,28 @@ class OFC3MaxEnv(AECEnv):
             print(f"Street: {self.current_street}, Button: Player {self.button_position}")
             for i, agent in enumerate(self.possible_agents):
                 ps = self.engine.player(i)
-                print(f"\n{agent} (Pos: {self._get_position_from_button(i)}):")
+                fl_status = "[FL]" if ps.in_fantasy_land else ""
+                print(f"\n{agent} (Pos: {self._get_position_from_button(i)}) {fl_status}:")
                 print(f"  Board: {ps.board.to_string()}")
+                hand = ps.get_hand()
+                if ps.in_fantasy_land and len(hand) >= 14:
+                    fl_cards_str = ", ".join([c.to_string() for c in hand])
+                    print(f"  FL Hand ({len(hand)}): {fl_cards_str}")
+
+    def get_fl_stats(self):
+        """FL統計を取得"""
+        return {
+            'fl_games_played': self.fl_games_played,
+            'fl_entries_total': self.fl_entries_total,
+            'fl_stays_total': self.fl_stays_total,
+            'current_fl_status': {agent: self.fl_status[agent] for agent in self.possible_agents}
+        }
+
+    def reset_fl_stats(self):
+        """FL統計をリセット"""
+        self.fl_games_played = 0
+        self.fl_entries_total = 0
+        self.fl_stays_total = 0
     
     def get_valid_actions(self, agent):
         """有効なアクションのリストを取得"""
@@ -491,19 +662,20 @@ class OFC3MaxEnv(AECEnv):
 
 
 if __name__ == '__main__':
-    """簡単なテスト"""
-    print("=== OFC 3-Max Environment Test ===\n")
-    
-    env = OFC3MaxEnv(render_mode='human')
+    """FLサポート付きの環境テスト"""
+    print("=== OFC 3-Max Environment Test (with FL Support) ===\n")
+
+    # FL有効モードでテスト
+    env = OFC3MaxEnv(render_mode='human', enable_fl_turns=True, continuous_games=True)
     env.reset(seed=42)
-    
+
     print("Initial state:")
     env.render()
-    
+
     step_count = 0
     for agent in env.agent_iter():
         observation, reward, termination, truncation, info = env.last()
-        
+
         if termination or truncation:
             action = None
         else:
@@ -512,16 +684,34 @@ if __name__ == '__main__':
                 action = valid_actions[0]
             else:
                 action = 0
-        
+
         env.step(action)
         step_count += 1
-        
+
         if step_count > 30:
             break
-    
+
     print("\nFinal state:")
     env.render()
-    
-    print("\nFinal rewards:")
+
+    print("\nFinal rewards and FL info:")
     for agent in env.possible_agents:
-        print(f"  {agent}: {env._cumulative_rewards.get(agent, 0)}")
+        info = env.infos.get(agent, {})
+        print(f"  {agent}:")
+        print(f"    Reward: {env._cumulative_rewards.get(agent, 0):.2f}")
+        print(f"    Entered FL: {info.get('entered_fl', False)}")
+        print(f"    Stayed FL: {info.get('stayed_fl', False)}")
+        print(f"    Was in FL: {info.get('was_in_fl', False)}")
+
+    print("\nFL Statistics:")
+    fl_stats = env.get_fl_stats()
+    print(f"  FL Games Played: {fl_stats['fl_games_played']}")
+    print(f"  FL Entries Total: {fl_stats['fl_entries_total']}")
+    print(f"  FL Stays Total: {fl_stats['fl_stays_total']}")
+
+    # FL状態が引き継がれることをテスト
+    if any(env.fl_status.values()):
+        print("\n--- Testing FL Carryover ---")
+        env.reset()  # FL状態を引き継いでリセット
+        print("After reset with FL carryover:")
+        env.render()

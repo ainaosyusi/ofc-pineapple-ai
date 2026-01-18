@@ -1,122 +1,129 @@
-# OFC Pineapple AI Project - Claude Guidelines
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Session Checklist
+
+Before starting work, check:
+1. **`NEXT_ACTIONS.md`** - Pending tasks and next steps
+2. **`docs/learning/04_current_status.md`** - Current training status
 
 ## Project Overview
 
-Open-Face Chinese Poker (Pineapple) AI using Deep Reinforcement Learning.
-54-card deck (including 2 Jokers), 3-player (3-Max) self-play training.
+Open-Face Chinese Poker (Pineapple) 3-Max AI using Deep Reinforcement Learning.
+- 54-card deck (52 standard + 2 Jokers)
+- 3-player simultaneous play
+- Fantasy Land with Ultimate Rules (14-17 cards based on top hand)
 
-## Tech Stack
+## Build Commands
 
-- **Game Engine**: C++ with pybind11 bindings
-- **RL Framework**: Stable-Baselines3, sb3-contrib (MaskablePPO)
-- **Environment**: PettingZoo AECEnv (multi-agent)
-- **Cloud**: AWS EC2 / GCP GCE (dual support)
-
-## Directory Structure
-
-```
-OFC NN/
-├── src/
-│   ├── cpp/                    # C++ game engine
-│   │   ├── game.hpp            # Main game logic
-│   │   ├── evaluator.hpp       # Hand evaluation (Joker support)
-│   │   └── pybind/             # Python bindings
-│   └── python/                 # Python training code
-│       ├── ofc_3max_env.py     # 3-player environment
-│       ├── train_gcp_phase7_parallel.py  # Parallel training (current)
-│       ├── cloud_storage.py    # AWS/GCP abstraction
-│       └── notifier.py         # Discord notifications
-├── docs/
-│   ├── learning/               # Learning documentation
-│   └── research/               # Research reports
-├── models/                     # Saved model checkpoints
-├── gcp/                        # GCP setup scripts
-└── aws/                        # AWS setup scripts
-```
-
-## Current Training Status
-
-### Phase 7: Parallel Training (SubprocVecEnv)
-- **Instance**: GCP n2-standard-4 (4 vCPU, 16GB)
-- **Parallel Envs**: 4 (SubprocVecEnv)
-- **FPS**: ~4,500-12,000
-- **Goal**: 20,000,000 steps
-
-### Key Metrics
-- Foul Rate: Target < 25%
-- Mean Royalty: Target > 1.0
-- Fantasyland Entry: Target > 5%
-
-## Commands
-
-### Check Training Status (GCP)
 ```bash
-# SSH to instance
-gcloud compute ssh ofc-training --zone=asia-northeast1-b
+# Build C++ extension (required after C++ changes)
+python setup.py build_ext --inplace
 
-# Check log
-ssh -i ~/.ssh/google_compute_engine naoai@INSTANCE_IP "tail -50 ~/ofc-training/training.log"
+# Verify build
+python -c "import ofc_engine as ofc; print('Engine loaded')"
 
-# Check processes
-ssh -i ~/.ssh/google_compute_engine naoai@INSTANCE_IP "ps aux | grep python"
+# C++ unit tests
+make test
+
+# Python tests
+python tests/test_joker.py
+python tests/test_fl_solver.py
 ```
 
-### Start/Stop Training
-```bash
-# Start parallel training
-cd ~/ofc-training && source venv_linux/bin/activate
-NUM_ENVS=4 nohup python3 src/python/train_gcp_phase7_parallel.py > training.log 2>&1 &
+## Training Commands
 
-# Stop training
-pkill -f train_gcp
-```
-
-### Cloud Instance Management
 ```bash
-# GCP
+# Local test (short run)
+NUM_ENVS=2 python src/python/train_phase85_selfplay.py --test-mode --steps 10000
+
+# GCP training
 gcloud compute instances start ofc-training --zone=asia-northeast1-b
-gcloud compute instances stop ofc-training --zone=asia-northeast1-b
+gcloud compute scp --recurse --zone=asia-northeast1-b src models setup.py ofc-training:~/ofc-training/
+gcloud compute ssh ofc-training --zone=asia-northeast1-b --command="cd ~/ofc-training && pip install -e . --force-reinstall --no-deps"
+gcloud compute ssh ofc-training --zone=asia-northeast1-b --command="cd ~/ofc-training && NUM_ENVS=4 nohup python3 src/python/train_phase85_selfplay.py --steps 50000000 > training.log 2>&1 &"
 
-# AWS
-python3 -c "import boto3; boto3.client('ec2', region_name='ap-northeast-1').stop_instances(InstanceIds=['i-xxx'])"
+# Check training log
+gcloud compute ssh ofc-training --zone=asia-northeast1-b --command="tail -50 ~/ofc-training/training.log"
+
+# Stop instance
+gcloud compute instances stop ofc-training --zone=asia-northeast1-b
 ```
 
-## Training Phases
+## Architecture
 
-| Phase | Description | Status | Foul Rate |
-|-------|-------------|--------|-----------|
-| 1 | Foul avoidance | Done | 37.8% |
-| 2 | Hand building | Done | 32.0% |
-| 3 | 2P Self-Play | Done | 58-63% |
-| 4 | Joker support | Done | **25.1%** |
-| 5 | 3P Self-Play | Done | 38.5% |
-| 7 | MCTS Distill + Parallel | **Running** | ~34% |
+### Layer 1: C++ Game Engine (`src/cpp/`)
 
-## Important Notes
+Header-only implementation with key files:
+- `game.hpp` - Game state machine, player management, FL handling
+- `board.hpp` - Top(3)/Middle(5)/Bottom(5) slot management
+- `evaluator.hpp` - Hand ranking with Joker support
+- `solver.hpp` - Fantasy Land optimal placement solver
+- `pybind/bindings.cpp` - Python bindings via pybind11
 
-1. **Venv on Server**: Use `venv_linux` (not `.venv` which is Mac's)
-2. **Checkpoint Cleanup**: Auto-cleanup keeps latest 2 + every 1M milestone
-3. **Discord Notifications**: Every 100k steps via webhook
-4. **Auto-Resume**: Training auto-resumes from latest checkpoint
+Card representation uses 64-bit bitboards for O(1) hand evaluation.
+
+### Layer 2: Python Environment (`src/python/`)
+
+- `ofc_3max_env.py` - PettingZoo AECEnv for 3-player multi-agent training
+- `ofc_env.py` - Gymnasium single-player environment
+
+Key features:
+- Action masking via MaskablePPO (filters invalid placements)
+- Continuous games with button rotation
+- FL state inheritance between games
+
+### Layer 3: Training Scripts (`src/python/train_*.py`)
+
+Current: `train_phase85_selfplay.py` - Self-play with Ultimate Rules FL
+- Uses Stable-Baselines3 MaskablePPO
+- 4 parallel environments (SubprocVecEnv)
+- Auto-checkpointing every 100k steps
+- Discord notifications via webhook
+
+## Key Concepts
+
+### Ultimate Rules (Fantasy Land)
+
+FL card distribution varies by top hand strength:
+| Top Hand | Cards | Difficulty |
+|----------|-------|------------|
+| QQ | 14 | Standard |
+| KK | 15 | Easier |
+| AA | 16 | Easy |
+| Trips | 17 | Easiest |
+
+### Game Phases
+
+```
+PHASE_INITIAL_DEAL → PHASE_TURN (×4) → PHASE_SHOWDOWN
+(5 cards)            (3 cards each)    (scoring)
+```
+
+### Observation Space (881 features)
+
+Board state for all players, current hand, opponent visible cards, FL status indicators.
 
 ## Environment Variables
 
 ```bash
-# Cloud provider selection
-CLOUD_PROVIDER=gcs   # or s3
+NUM_ENVS=4                    # Parallel training environments
+CLOUD_PROVIDER=gcs            # or s3
 GCS_BUCKET=bucket-name
-S3_BUCKET=bucket-name
-
-# Training config
-NUM_ENVS=4           # Parallel environments
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+DISCORD_WEBHOOK_URL=...       # Notifications every 100k steps
 ```
 
-## Cost Estimation (GCP)
+## Server Notes
 
-| Instance | Price/hour | FPS | Cost for 20M steps |
-|----------|-----------|-----|-------------------|
-| n2-standard-4 | ~$0.19 | ~5,000 | ~$2 |
-| n2-standard-16 | ~$0.76 | ~6,500 | ~$6 |
+- Use `venv_linux` on GCP (not `.venv` which is Mac)
+- Checkpoint auto-cleanup keeps latest 2 + every 1M milestone
+- Training auto-resumes from latest checkpoint
 
-Parallel training on n2-standard-4 is most cost-effective.
+## Current Performance (Phase 8)
+
+| Metric | Value |
+|--------|-------|
+| Foul Rate | 20.8% |
+| FL Entry | 3.2% |
+| FPS | 4,500-12,000 |

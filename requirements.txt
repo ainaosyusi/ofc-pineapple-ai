@@ -11,8 +11,9 @@ pandas
 pettingzoo>=1.24.0
 supersuit>=3.9.0
 
-# AWS Integration
+# Cloud Storage (AWS/GCP)
 boto3>=1.28.0
+google-cloud-storage>=2.10.0
 
 # Notifications
 requests>=2.31.0
@@ -22,3 +23,7 @@ pybind11>=2.11.0
 
 # Visualization
 tensorboard>=2.14.0
+matplotlib>=3.7.0
+
+# Discord Bot
+discord.py>=2.3.0

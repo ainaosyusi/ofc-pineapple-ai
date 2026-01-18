@@ -66,18 +66,22 @@ def load_manual_weights(model: MaskablePPO, zip_path: str) -> bool:
 
 class AggressiveOFCEnv(gym.Env):
     """
-    攻撃的プレイスタイル用の報酬修正環境
+    攻撃的プレイスタイル用の報酬修正環境（FL対応）
 
     報酬設計:
     - 基本報酬: ゲームスコア
     - FL突入ボーナス: +25 (通常+15から増加)
     - ロイヤリティボーナス: royalty × 1.5
     - 高役ボーナス: SF/Quadsに追加報酬
+
+    FL対応:
+    - enable_fl_turns=Trueで相手のFLターンを実装
+    - FLプレイヤーはFantasySolverで最適配置
     """
 
-    def __init__(self, env_id: int = 0):
+    def __init__(self, env_id: int = 0, enable_fl_turns: bool = True):
         super().__init__()
-        self.env = OFC3MaxEnv()
+        self.env = OFC3MaxEnv(enable_fl_turns=enable_fl_turns, continuous_games=False)
         self.env_id = env_id
         self.learning_agent = "player_0"
 
@@ -86,6 +90,7 @@ class AggressiveOFCEnv(gym.Env):
 
         # 攻撃的報酬パラメータ
         self.fl_bonus = 25.0  # FL突入ボーナス (通常15)
+        self.fl_stay_bonus = 15.0  # FL継続ボーナス
         self.royalty_multiplier = 1.5  # ロイヤリティ倍率
         self.high_hand_bonus = 10.0  # SF/Quads追加報酬
 
@@ -117,6 +122,7 @@ class AggressiveOFCEnv(gym.Env):
             royalty = result.get_royalty(0)
             fouled = result.is_fouled(0)
             entered_fl = result.entered_fl(0)
+            stayed_fl = result.stayed_fl(0)
 
             # 攻撃的報酬設計
             reward = base_score
@@ -129,11 +135,16 @@ class AggressiveOFCEnv(gym.Env):
                 if entered_fl:
                     reward += self.fl_bonus
 
+                # FL継続ボーナス
+                if stayed_fl:
+                    reward += self.fl_stay_bonus
+
             info = {
                 'score': base_score,
                 'royalty': royalty,
                 'fouled': fouled,
                 'entered_fl': entered_fl,
+                'stayed_fl': stayed_fl,
                 'variant': 'aggressive',
                 'win': base_score > 0,
                 'loss': base_score < 0,

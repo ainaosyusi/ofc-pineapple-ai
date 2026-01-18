@@ -213,24 +213,117 @@ class EndgameSolver:
     def _evaluate_final_score(self, engine: 'ofc.GameEngine', player: int) -> float:
         """
         盤面の最終スコアを評価
-        
-        ゲームが終了していない場合は、ヒューリスティックで評価
+
+        改善版評価関数:
+        1. ファウルを厳しくペナルティ
+        2. 行の強さの順序（Bottom > Middle > Top）を確認
+        3. 潜在的なファウルリスクを評価
+        4. FL資格の考慮
+        5. ロイヤリティ bonus
         """
-        phase = engine.phase()
-        
-        if phase == ofc.GamePhase.COMPLETE:
-            result = engine.result()
-            return float(result.get_score(player))
-        
-        # 終了していない場合: ロイヤリティとファウルで評価
         player_state = engine.player(player)
         board = player_state.board
-        
+
+        # === 1. 即座にファウルならば大きなペナルティ ===
         if board.is_foul():
-            return -30.0  # ファウルペナルティ
-        
+            return -100.0
+
+        # === 2. 各行の評価値を取得 ===
+        top_val = board.evaluate_top()
+        mid_val = board.evaluate_mid()
+        bot_val = board.evaluate_bot()
+
+        top_count = board.count(ofc.Row.TOP)
+        mid_count = board.count(ofc.Row.MIDDLE)
+        bot_count = board.count(ofc.Row.BOTTOM)
+
+        score = 0.0
+
+        # === 3. 完成した行の順序チェック（ファウル予防） ===
+        # Bottom > Middle の確認（両方5枚以上の場合）
+        if bot_count >= 5 and mid_count >= 5:
+            if bot_val < mid_val:
+                # Bottom < Middle = 確定ファウル
+                return -100.0
+            elif bot_val == mid_val:
+                # 同じ強さ = 危険
+                score -= 30.0
+
+        # Middle > Top の確認（両方完成の場合）
+        if mid_count >= 5 and top_count >= 3:
+            if mid_val < top_val:
+                # Middle < Top = 確定ファウル
+                return -100.0
+            elif mid_val == top_val:
+                # 同じ強さ = 危険
+                score -= 30.0
+
+        # === 4. 潜在的ファウルリスクの評価 ===
+        # Topが強くなりすぎている場合のリスク
+        if top_count >= 2 and mid_count >= 3:
+            # 部分的な評価でリスクを判定
+            if mid_val < top_val:
+                # 既にTopがMiddleより強い = 非常に危険
+                score -= 50.0
+            elif mid_val == top_val:
+                # 同等 = やや危険
+                score -= 20.0
+
+        # MiddleがBottomより強くなりそうな場合
+        if mid_count >= 3 and bot_count >= 3:
+            if bot_val < mid_val:
+                # 既にBottomがMiddleより弱い = 危険
+                score -= 40.0
+            elif bot_val == mid_val:
+                score -= 15.0
+
+        # === 5. 安全マージンのボーナス ===
+        # 行間に十分な強さの差がある場合はボーナス
+        if bot_count >= 5 and mid_count >= 5:
+            # BottomがMiddleより明確に強い
+            if bot_val > mid_val:
+                score += 10.0
+                # HandRankの差もチェック
+                if bot_val.rank.value > mid_val.rank.value:
+                    score += 5.0
+
+        if mid_count >= 5 and top_count >= 3:
+            # MiddleがTopより明確に強い
+            if mid_val > top_val:
+                score += 10.0
+                if mid_val.rank.value > top_val.rank.value:
+                    score += 5.0
+
+        # === 6. FL資格のボーナス ===
+        if board.qualifies_for_fl():
+            score += 15.0
+        elif top_count >= 2:
+            # FL資格の可能性をチェック
+            top_rank = top_val.rank
+            if top_rank == ofc.HandRank.THREE_OF_A_KIND:
+                score += 12.0  # Trips = FL確定
+            elif top_rank == ofc.HandRank.ONE_PAIR:
+                # ペアの強さによるボーナス
+                score += 5.0
+
+        # === 7. ロイヤリティボーナス ===
         royalty = board.calculate_royalties()
-        return float(royalty)
+        score += float(royalty) * 2.0  # ロイヤリティを重視
+
+        # === 8. ハンドランクのボーナス ===
+        # 各行のハンドランクに基づくスコア
+        if bot_count >= 5:
+            score += bot_val.rank.value * 1.5
+        if mid_count >= 5:
+            score += mid_val.rank.value * 1.0
+        if top_count >= 3:
+            score += top_val.rank.value * 0.5
+
+        # === 9. 完成度ボーナス ===
+        if board.is_complete():
+            score += 20.0  # 完成ボーナス
+
+        return score
     
     def _generate_row_combinations(self, n: int, limits: List[int]):
         """n枚のカードを3行に分配する全組み合わせを生成"""
@@ -243,11 +336,18 @@ class EndgameSolver:
                 yield [first_row] + rest
     
     def _encode_initial_action(self, row_combo: List[int]) -> int:
-        """初回アクションをエンコード"""
-        # 最初のカードの配置をアクションIDとして返す
-        if row_combo:
-            return row_combo[0]
-        return 0
+        """初回アクションをエンコード
+
+        Environment expects: action_id = sum(row_combo[i] * 3^i for i in range(5))
+        where row_combo[i] ∈ {0=TOP, 1=MIDDLE, 2=BOTTOM}
+        """
+        if not row_combo:
+            return 0
+
+        action_id = 0
+        for i, row in enumerate(row_combo):
+            action_id += row * (3 ** i)
+        return action_id
     
     def _encode_turn_action(
         self,
@@ -255,11 +355,17 @@ class EndgameSolver:
         idx2: int, row2: 'ofc.Row',
         discard_idx: int
     ) -> int:
-        """通常ターンアクションをエンコード"""
-        # 簡易エンコーディング
+        """通常ターンアクションをエンコード
+
+        Environment expects: action_id = discard_idx * 9 + first_row * 3 + second_row
+        where row ∈ {0=TOP, 1=MIDDLE, 2=BOTTOM}, discard_idx ∈ {0, 1, 2}
+
+        Note: The card indices (idx1, idx2) determine which cards go where,
+        but the action encoding is based on the discard choice and row placements.
+        """
         row1_val = row1.value if hasattr(row1, 'value') else int(row1)
         row2_val = row2.value if hasattr(row2, 'value') else int(row2)
-        return idx1 * 9 + row1_val * 3 + row2_val
+        return discard_idx * 9 + row1_val * 3 + row2_val
 
 
 def test_solver():

@@ -153,16 +153,32 @@ public:
     current_turn_ = 1;
   }
 
-  // FL状態を引き継いで開始
+  // FL状態を引き継いで開始（boolのみ - 後方互換用）
   template <typename RNG>
   void start_with_fl(RNG &rng, const std::array<bool, MAX_PLAYERS> &fl_status) {
+    // デフォルトは14枚
+    std::array<int, MAX_PLAYERS> fl_cards = {0};
+    for (int p = 0; p < MAX_PLAYERS; ++p) {
+      fl_cards[p] = fl_status[p] ? FL_BASE_CARDS : 0;
+    }
+    start_with_fl_cards(rng, fl_cards);
+  }
+
+  // FL状態を引き継いで開始（Ultimate Rules: カード枚数指定）
+  // fl_cards[p] = 0: 通常プレイヤー
+  // fl_cards[p] = 14-17: FLプレイヤー（枚数に応じた配布）
+  template <typename RNG>
+  void start_with_fl_cards(RNG &rng, const std::array<int, MAX_PLAYERS> &fl_cards) {
     reset();
     deck_.shuffle(rng);
 
     for (int p = 0; p < num_players_; ++p) {
-      players_[p].in_fantasy_land = fl_status[p];
-      if (fl_status[p]) {
-        players_[p].fl_cards_to_receive = FL_BASE_CARDS;
+      if (fl_cards[p] > 0) {
+        players_[p].in_fantasy_land = true;
+        players_[p].fl_cards_to_receive = fl_cards[p];
+      } else {
+        players_[p].in_fantasy_land = false;
+        players_[p].fl_cards_to_receive = 0;
       }
     }
 
