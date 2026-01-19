@@ -72,6 +72,25 @@ PHASE_DATA = {
                2028, 1865, 1731, 1624, 1536, 1460],
         'color': '#8c564b',
     },
+    'Phase 8 (Self-Play)': {
+        'description': 'Multi-Variant Self-Play',
+        'steps': [0, 1000000, 2000000, 3000000, 4000000, 5000000, 6000000, 7000000, 8000000, 9800000],
+        'foul_rate': [25.8, 24.5, 23.2, 22.5, 21.8, 21.2, 21.0, 20.9, 20.8, 20.8],
+        'royalty': [7.56, 7.60, 7.65, 7.70, 7.75, 7.80, 7.82, 7.85, 7.87, 7.87],
+        'mean_score': [7.56, 7.60, 7.65, 7.70, 7.75, 7.80, 7.82, 7.85, 7.87, 7.87],
+        'fl_entry': [1.1, 1.5, 2.0, 2.3, 2.6, 2.8, 3.0, 3.1, 3.2, 3.2],
+        'color': '#17becf',
+    },
+    'Phase 8.5 (Full FL)': {
+        'description': 'Ultimate Rules FL学習',
+        'steps': [0, 10000000, 20000000, 30000000, 40000000, 48600000],
+        'foul_rate': [20.8, 21.5, 22.0, 21.8, 21.6, 21.8],
+        'royalty': [7.87, 8.00, 8.15, 8.30, 8.40, 8.44],
+        'mean_score': [7.87, 8.00, 8.15, 8.30, 8.40, 8.44],
+        'win_rate': [60.0, 62.0, 63.5, 64.5, 65.0, 65.3],
+        'fps': [800, 780, 760, 755, 753, 753],
+        'color': '#e377c2',
+    },
 }
 
 
@@ -183,9 +202,9 @@ def plot_phase7_detail():
 
 def plot_all_phases_summary():
     """全フェーズの最終成績サマリー"""
-    phases = ['Phase 1', 'Phase 2', 'Phase 3', 'Phase 4\n(Joker)', 'Phase 5\n(3-Max)', 'Phase 7\n(Parallel)']
-    foul_rates = [37.8, 32.0, 58.0, 25.1, 38.5, 34.0]
-    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+    phases = ['Phase 1', 'Phase 2', 'Phase 3', 'Phase 4\n(Joker)', 'Phase 5\n(3-Max)', 'Phase 7\n(Parallel)', 'Phase 8\n(Self-Play)', 'Phase 8.5\n(Full FL)']
+    foul_rates = [37.8, 32.0, 58.0, 25.1, 38.5, 34.0, 20.8, 21.8]
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#17becf', '#e377c2']
 
     fig, ax = plt.subplots(figsize=(12, 6))
 
