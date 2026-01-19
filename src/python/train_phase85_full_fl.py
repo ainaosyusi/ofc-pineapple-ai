@@ -195,7 +195,11 @@ class ParallelOFCEnv(gym.Env):
         return self.env.observe(self.learning_agent), {}
 
     def step(self, action):
-        self.env.step(action)
+        # 終了済みエージェントにはNoneを送る
+        if self.env.terminations.get(self.learning_agent, False):
+            self.env.step(None)
+        else:
+            self.env.step(action)
         self._play_opponents()
 
         obs = self.env.observe(self.learning_agent)
@@ -249,7 +253,17 @@ class ParallelOFCEnv(gym.Env):
         """相手プレイヤーをプレイ（Self-Play対応）"""
         global _global_opponent_manager, _global_inference_model
 
-        while not all(self.env.terminations.values()) and self.env.agent_selection != self.learning_agent:
+        max_iterations = 50
+        for _ in range(max_iterations):
+            if all(self.env.terminations.values()):
+                break
+            if self.env.agent_selection == self.learning_agent:
+                if not self.env.terminations.get(self.learning_agent, False):
+                    break
+                # learning_agentが終了済みならNoneでステップ
+                self.env.step(None)
+                continue
+
             agent = self.env.agent_selection
             if self.env.terminations.get(agent, False):
                 self.env.step(None)
@@ -257,7 +271,7 @@ class ParallelOFCEnv(gym.Env):
 
             valid_actions = self.env.get_valid_actions(agent)
             if not valid_actions:
-                self.env.step(0)
+                self.env.step(None)
                 continue
 
             action = self._get_opponent_action(agent, valid_actions)
