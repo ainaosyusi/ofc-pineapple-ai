@@ -19,12 +19,17 @@ import sys
 import time
 import random
 import argparse
+import multiprocessing as mp
 import numpy as np
 from datetime import datetime
 from collections import deque
 from typing import Optional, List, Callable, Tuple, Dict
 import torch
 torch.distributions.Distribution.set_default_validate_args(False)
+
+# SubprocVecEnv用: spawnメソッドを使用（forkserverより安定）
+if mp.get_start_method(allow_none=True) is None:
+    mp.set_start_method('spawn')
 
 # パス設定
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -144,10 +149,10 @@ class ParallelOFCEnv(gym.Env):
 
     def __init__(self, env_id: int = 0, use_selfplay: bool = True):
         super().__init__()
-        # Phase 8.5: continuous_games=True で実践形式
+        # Phase 8.5: 一時的にcontinuous_games=False（パフォーマンス調査用）
         self.env = OFC3MaxEnv(
             enable_fl_turns=True,
-            continuous_games=True  # FL引き継ぎ + ボタンローテーション
+            continuous_games=False  # 一時的にFalse
         )
         self.env_id = env_id
         self.learning_agent = "player_0"
@@ -195,7 +200,7 @@ class ParallelOFCEnv(gym.Env):
         return self.env.observe(self.learning_agent), {}
 
     def step(self, action):
-        # 終了済みエージェントにはNoneを送る
+        # learning_agentが既にterminatedの場合はNoneを渡す
         if self.env.terminations.get(self.learning_agent, False):
             self.env.step(None)
         else:
@@ -253,17 +258,7 @@ class ParallelOFCEnv(gym.Env):
         """相手プレイヤーをプレイ（Self-Play対応）"""
         global _global_opponent_manager, _global_inference_model
 
-        max_iterations = 50
-        for _ in range(max_iterations):
-            if all(self.env.terminations.values()):
-                break
-            if self.env.agent_selection == self.learning_agent:
-                if not self.env.terminations.get(self.learning_agent, False):
-                    break
-                # learning_agentが終了済みならNoneでステップ
-                self.env.step(None)
-                continue
-
+        while not all(self.env.terminations.values()) and self.env.agent_selection != self.learning_agent:
             agent = self.env.agent_selection
             if self.env.terminations.get(agent, False):
                 self.env.step(None)
@@ -271,7 +266,7 @@ class ParallelOFCEnv(gym.Env):
 
             valid_actions = self.env.get_valid_actions(agent)
             if not valid_actions:
-                self.env.step(None)
+                self.env.step(0)
                 continue
 
             action = self._get_opponent_action(agent, valid_actions)
@@ -304,6 +299,11 @@ class ParallelOFCEnv(gym.Env):
         return random.choice(valid_actions)
 
     def action_masks(self) -> np.ndarray:
+        # terminatedの場合はダミーマスクを返す（最初のアクションのみ有効）
+        if self.env.terminations.get(self.learning_agent, False):
+            mask = np.zeros(243, dtype=np.int8)
+            mask[0] = 1
+            return mask
         return self.env.action_masks(self.learning_agent)
 
 
@@ -584,8 +584,14 @@ def train_phase85_full_fl(
         update_freq=200_000
     )
 
-    print(f"[*] Creating {num_envs} parallel environments (Full FL)...")
-    env = SubprocVecEnv([make_env(i, use_selfplay=True) for i in range(num_envs)])
+    # SubprocVecEnv (spawn) または DummyVecEnv
+    use_dummy = os.getenv("USE_DUMMY_VEC_ENV", "0").lower() in ("1", "true", "yes")
+    if use_dummy:
+        print(f"[*] Creating {num_envs} environments with DummyVecEnv...")
+        env = DummyVecEnv([make_env(i, use_selfplay=False) for i in range(num_envs)])
+    else:
+        print(f"[*] Creating {num_envs} parallel environments with SubprocVecEnv (spawn)...")
+        env = SubprocVecEnv([make_env(i, use_selfplay=False) for i in range(num_envs)], start_method='spawn')
 
     save_dir = "models"
     os.makedirs(save_dir, exist_ok=True)

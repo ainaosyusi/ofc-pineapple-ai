@@ -31,7 +31,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from sb3_contrib import MaskablePPO
 from sb3_contrib.common.wrappers import ActionMasker
 from stable_baselines3.common.callbacks import BaseCallback
-from stable_baselines3.common.vec_env import DummyVecEnv
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 import gymnasium as gym
 
 from ofc_3max_env import OFC3MaxEnv
@@ -161,26 +161,14 @@ class SelfPlayEnv(gym.Env):
                 continue
 
             valid_actions = self.env.get_valid_actions(agent)
-            if not valid_actions:
-                self.env.step(None)
-                continue
-
             # Self-Play: 同じモデルで推論
             action = self._get_selfplay_action(agent, valid_actions)
             self.env.step(action)
 
     def _get_selfplay_action(self, agent: str, valid_actions: List[int]) -> int:
-        """Self-Playアクションを取得"""
-        if not hasattr(self, 'model') or self.model is None:
-            return random.choice(valid_actions)
-
-        try:
-            obs = self.env.observe(agent)
-            mask = self.env.action_masks(agent)
-            action, _ = self.model.predict(obs, action_masks=mask, deterministic=False)
-            return int(action)
-        except Exception as e:
-            return random.choice(valid_actions)
+        """Self-Playアクションを取得（高速化のためランダム）"""
+        # 高速化: Self-Play推論を無効化、ランダム選択
+        return random.choice(valid_actions) if valid_actions else 0
 
     def action_masks(self) -> np.ndarray:
         return self.env.action_masks(self.learning_agent)
@@ -242,7 +230,11 @@ class SelfPlayCallback(BaseCallback):
         self._update_env_models()
 
     def _update_env_models(self):
-        """全環境のモデルを更新"""
+        """全環境のモデルを更新（DummyVecEnvの場合のみ）"""
+        # SubprocVecEnvでは別プロセスなのでモデル共有不可
+        # 現在は_get_selfplay_actionでランダム選択なので不要
+        if not hasattr(self.training_env, 'envs'):
+            return
         for env in self.training_env.envs:
             if hasattr(env, 'env') and hasattr(env.env, 'set_model'):
                 env.env.set_model(self.model)
@@ -393,6 +385,7 @@ def train_phase85_selfplay(
     )
 
     print(f"[*] Creating {num_envs} environments...")
+    # DummyVecEnvを使用（SubprocVecEnvはSelfPlayEnvと相性が悪い）
     env = DummyVecEnv([make_env(i) for i in range(num_envs)])
 
     save_dir = "models"
@@ -400,7 +393,10 @@ def train_phase85_selfplay(
 
     import glob
 
+    # Check for selfplay checkpoints first, then full_fl checkpoints
     p85_checkpoints = glob.glob(os.path.join(save_dir, "p85_selfplay_*.zip"))
+    if not p85_checkpoints:
+        p85_checkpoints = glob.glob(os.path.join(save_dir, "p85_full_fl_*.zip"))
 
     latest_checkpoint = None
     is_resume = False
@@ -418,16 +414,19 @@ def train_phase85_selfplay(
             verbose=1,
             learning_rate=3e-4,
             gamma=0.99,
-            n_steps=2048,
-            batch_size=256,
+            n_steps=256,  # Reduced for faster output and quicker feedback
+            batch_size=64,
             ent_coef=0.01,
-            tensorboard_log="./logs/phase85_selfplay/"
+            tensorboard_log=None  # Disabled to reduce overhead
         )
 
-    # 環境にモデルを設定
-    for e in env.envs:
-        if hasattr(e, 'env') and hasattr(e.env, 'set_model'):
-            e.env.set_model(model)
+    # 環境にモデルを設定（DummyVecEnvの場合のみ）
+    # 注: SubprocVecEnvでは別プロセスなのでモデル共有不可
+    # 現在は_get_selfplay_actionでランダム選択なので不要
+    if hasattr(env, 'envs'):
+        for e in env.envs:
+            if hasattr(e, 'env') and hasattr(e.env, 'set_model'):
+                e.env.set_model(model)
 
     callback = SelfPlayCallback(
         "models/p85_selfplay",
