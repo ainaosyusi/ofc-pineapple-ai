@@ -64,18 +64,33 @@ class TrainingNotifier:
     ):
         """定期進捗レポート"""
         progress = step / total_steps * 100
-        
+
         message = f"📊 **{self.project_name}** - Progress Update\n\n"
         message += f"**Progress:** {progress:.1f}% ({step:,} / {total_steps:,})\n"
         message += f"```\n"
         message += f"Games: {metrics.get('games', 0):,}\n"
         message += f"Foul Rate: {metrics.get('foul_rate', 0):.1f}%\n"
         message += f"Mean Score: {metrics.get('mean_score', 0):+.2f}\n"
-        message += f"Mean Royalty: {metrics.get('mean_royalty', 0):.2f}\n"
-        message += f"Win Rate: {metrics.get('win_rate', 0):.1f}%\n"
-        message += f"FPS: {metrics.get('fps', 0):.0f}\n"
+
+        # FL特化メトリクス（存在する場合のみ表示）
+        if 'fl_entry_rate' in metrics:
+            message += f"FL Entry: {metrics.get('fl_entry_rate', 0):.1f}%\n"
+        if 'trips_stay' in metrics:
+            message += f"--- FL Stay Rates ---\n"
+            message += f"Trips(17): {metrics.get('trips_stay', 0):.1f}%\n"
+            message += f"AA(16): {metrics.get('aa_stay', 0):.1f}%\n"
+            message += f"KK(15): {metrics.get('kk_stay', 0):.1f}%\n"
+            message += f"QQ(14): {metrics.get('qq_stay', 0):.1f}%\n"
+
+        # 通常メトリクス（存在する場合のみ表示）
+        if 'mean_royalty' in metrics:
+            message += f"Mean Royalty: {metrics.get('mean_royalty', 0):.2f}\n"
+        if 'win_rate' in metrics:
+            message += f"Win Rate: {metrics.get('win_rate', 0):.1f}%\n"
+        if 'fps' in metrics:
+            message += f"FPS: {metrics.get('fps', 0):.0f}\n"
         message += f"```"
-        
+
         self._send(message, color=0x0099ff)  # Blue
     
     def send_checkpoint(self, checkpoint_path: str, step: int):
