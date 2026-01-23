@@ -277,13 +277,23 @@ class OFC3MaxEnv(AECEnv):
     
     def step(self, action):
         """アクションを実行"""
-        if self.terminations[self.agent_selection] or self.truncations[self.agent_selection]:
+        # 状態の整合性チェック（連続ゲームでの不整合対策）
+        if self.agent_selection not in self.terminations or self.agent_selection not in self.infos:
+            # 状態が不整合なので全て初期化
+            self.agents = self.possible_agents[:]
+            self.terminations = {agent: False for agent in self.possible_agents}
+            self.truncations = {agent: False for agent in self.possible_agents}
+            self.infos = {agent: {} for agent in self.possible_agents}
+            self.rewards = {agent: 0 for agent in self.possible_agents}
+            self._cumulative_rewards = {agent: 0 for agent in self.possible_agents}
+
+        if self.terminations.get(self.agent_selection, False) or self.truncations.get(self.agent_selection, False):
             self._was_dead_step(action)
             return
-        
+
         agent = self.agent_selection
         player_idx = self.agent_name_mapping[agent]
-        
+
         # 報酬リセット
         self.rewards = {a: 0 for a in self.agents}
         
