@@ -43,9 +43,17 @@ bin/
 
 # Logs and Models
 logs/
+models/**/*.zip
+models/**/*.pth
 models/*.zip
 models/*.pth
+models/backup/
+models_backup/
 checkpoints/
+*.log
+training_*.log
+data/
+gcp_backup/
 
 # Other
 .agent/
@@ -55,3 +63,6 @@ checkpoints/
 
 # Private info
 .aws_private_info.md
+
+# Linux venv
+venv_linux/

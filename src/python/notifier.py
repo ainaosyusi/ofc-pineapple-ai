@@ -75,6 +75,8 @@ class TrainingNotifier:
         # FL特化メトリクス（存在する場合のみ表示）
         if 'fl_entry_rate' in metrics:
             message += f"FL Entry: {metrics.get('fl_entry_rate', 0):.1f}%\n"
+        if 'fl_stay_rate' in metrics:
+            message += f"FL Stay: {metrics.get('fl_stay_rate', 0):.1f}%\n"
         if 'trips_stay' in metrics:
             message += f"--- FL Stay Rates ---\n"
             message += f"Trips(17): {metrics.get('trips_stay', 0):.1f}%\n"

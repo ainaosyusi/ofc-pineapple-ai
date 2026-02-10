@@ -1,5 +1,5 @@
 """
-OFC Pineapple AI - Phase 8.5 Full FL Training
+OFC Pineapple AI - Phase 9 FL Mastery Training
 完全なFL（Fantasy Land）ターンを含む実践形式の学習
 
 Phase 8との違い:
@@ -44,6 +44,13 @@ import gymnasium as gym
 from ofc_3max_env import OFC3MaxEnv
 from notifier import TrainingNotifier
 from cloud_storage import init_cloud_storage
+
+try:
+    from endgame_solver import EndgameSolver
+    import ofc_engine as ofc
+    HAS_SOLVER = True
+except ImportError:
+    HAS_SOLVER = False
 
 # 設定
 NUM_ENVS = int(os.getenv("NUM_ENVS", "4"))
@@ -149,10 +156,11 @@ class ParallelOFCEnv(gym.Env):
 
     def __init__(self, env_id: int = 0, use_selfplay: bool = True):
         super().__init__()
-        # Phase 8.5: 一時的にcontinuous_games=False（パフォーマンス調査用）
+        # Phase 8.5b: continuous_games=True でFL継続学習を有効化
         self.env = OFC3MaxEnv(
             enable_fl_turns=True,
-            continuous_games=False  # 一時的にFalse
+            continuous_games=True,  # FL状態引き継ぎ + ボタンローテーション有効
+            fl_solver_mode='greedy'  # 学習用高速solver (brute-forceは遅すぎる)
         )
         self.env_id = env_id
         self.learning_agent = "player_0"
@@ -174,6 +182,10 @@ class ParallelOFCEnv(gym.Env):
 
         # ボタン統計
         self.button_positions = {0: 0, 1: 0, 2: 0}
+
+        # C3: EndgameSolver統合（残り3スロット以下で発動）
+        self.endgame_solver = EndgameSolver(max_remaining=3) if HAS_SOLVER else None
+        self.solver_overrides = 0
 
     def reset(self, seed=None, options=None):
         # リセット前にFL状態をチェック
@@ -200,10 +212,25 @@ class ParallelOFCEnv(gym.Env):
         return self.env.observe(self.learning_agent), {}
 
     def step(self, action):
-        # learning_agentが既にterminatedの場合はNoneを渡す
-        if self.env.terminations.get(self.learning_agent, False):
+        # learning_agentまたはagent_selectionがterminatedの場合はNoneを渡す
+        # (PettingZooの_was_dead_stepはNoneのみ受け付ける)
+        is_terminated = (
+            self.env.terminations.get(self.learning_agent, False) or
+            self.env.terminations.get(self.env.agent_selection, False) or
+            all(self.env.terminations.values())  # 全員terminated
+        )
+        if is_terminated:
             self.env.step(None)
         else:
+            # C3: EndgameSolver override for learning agent's endgame
+            if (self.endgame_solver is not None
+                    and self.env.engine.phase() == ofc.GamePhase.TURN
+                    and self.endgame_solver.can_solve(self.env.engine, 0)):
+                solver_action, _ = self.endgame_solver.solve(self.env.engine, 0)
+                mask = self.env.action_masks(self.learning_agent)
+                if solver_action < len(mask) and mask[solver_action] == 1:
+                    action = solver_action
+                    self.solver_overrides += 1
             self.env.step(action)
         self._play_opponents()
 
@@ -255,20 +282,32 @@ class ParallelOFCEnv(gym.Env):
         return obs, reward, terminated, truncated, info
 
     def _play_opponents(self):
-        """相手プレイヤーをプレイ（Self-Play対応）"""
+        """相手プレイヤーをプレイ（Self-Play対応、無限ループ防止付き）"""
         global _global_opponent_manager, _global_inference_model
 
+        max_iterations = 500
+        iterations = 0
         while not all(self.env.terminations.values()) and self.env.agent_selection != self.learning_agent:
+            iterations += 1
+            if iterations > max_iterations:
+                # 安全弁: 強制終了
+                for a in self.env.possible_agents:
+                    self.env.terminations[a] = True
+                break
+
             agent = self.env.agent_selection
             if self.env.terminations.get(agent, False):
                 self.env.step(None)
                 continue
 
-            valid_actions = self.env.get_valid_actions(agent)
-            if not valid_actions:
-                self.env.step(0)
+            # ボード満杯プレイヤーはスキップ
+            pidx = self.env.agent_name_mapping[agent]
+            ps = self.env.engine.player(pidx)
+            if ps.board.total_placed() >= 13 or ps.in_fantasy_land:
+                self.env.step(None)
                 continue
 
+            valid_actions = self.env.get_valid_actions(agent)
             action = self._get_opponent_action(agent, valid_actions)
             self.env.step(action)
 
@@ -322,7 +361,7 @@ def make_env(env_id: int, use_selfplay: bool = True) -> Callable:
 
 class Phase85Callback(BaseCallback):
     """
-    Phase 8.5 Full FL学習用コールバック
+    Phase 9 FL Mastery学習用コールバック
 
     拡張統計:
     - FL Entry / Stay率
@@ -469,7 +508,7 @@ class Phase85Callback(BaseCallback):
         vs_latest_winrate = self.vs_latest_wins / self.vs_latest_games * 100 if self.vs_latest_games > 0 else 0
         vs_past_winrate = self.vs_past_wins / self.vs_past_games * 100 if self.vs_past_games > 0 else 0
 
-        print(f"\n[Step {self.num_timesteps:,}] Phase 8.5 Full FL")
+        print(f"\n[Step {self.num_timesteps:,}] Phase 9 FL Mastery")
         print(f"  Games: {self.total_games:,}")
         print(f"  Foul Rate: {foul_rate:.1f}%")
         print(f"  Mean Score: {mean_score:+.2f}")
@@ -523,7 +562,7 @@ class Phase85Callback(BaseCallback):
         if not checkpoint_dir:
             checkpoint_dir = "."
 
-        files = glob.glob(os.path.join(checkpoint_dir, "p85_full_fl_*.zip"))
+        files = glob.glob(os.path.join(checkpoint_dir, "p9_fl_mastery_*.zip"))
         if not files:
             return
 
@@ -548,9 +587,10 @@ class Phase85Callback(BaseCallback):
 def train_phase85_full_fl(
     total_timesteps: int = 20_000_000,
     test_mode: bool = False,
-    num_envs: int = None
+    num_envs: int = None,
+    pretrained_path: str = None,
 ):
-    """Phase 8.5 Full FL学習メイン関数"""
+    """Phase 9 FL Mastery学習メイン関数"""
     if num_envs is None:
         num_envs = NUM_ENVS
 
@@ -560,7 +600,7 @@ def train_phase85_full_fl(
         print("[TEST MODE] Running with limited settings")
 
     print("=" * 60)
-    print(f"OFC Pineapple AI - Phase 8.5: Full FL Training")
+    print(f"OFC Pineapple AI - Phase 9: FL Mastery Training")
     print("=" * 60)
     print(f"Parallel Envs: {num_envs}")
     print(f"Total Steps: {total_timesteps:,}")
@@ -598,49 +638,48 @@ def train_phase85_full_fl(
 
     import glob
 
-    # Phase 8.5チェックポイントを探す
-    p85_checkpoints = glob.glob(os.path.join(save_dir, "p85_full_fl_*.zip"))
+    # Phase 9 FL Mastery チェックポイントを探す
+    p9_checkpoints = glob.glob(os.path.join(save_dir, "p9_fl_mastery_*.zip"))
 
     latest_checkpoint = None
     is_resume = False
 
-    if p85_checkpoints:
-        latest_checkpoint = max(p85_checkpoints, key=lambda f: int(f.split('_')[-1].replace('.zip', '')))
-        print(f"[*] Found Phase 8.5 checkpoint: {latest_checkpoint}. Resuming...")
+    if p9_checkpoints:
+        latest_checkpoint = max(p9_checkpoints, key=lambda f: int(f.split('_')[-1].replace('.zip', '')))
+        print(f"[*] Found Phase 9 checkpoint: {latest_checkpoint}. Resuming...")
         model = MaskablePPO.load(latest_checkpoint, env=env)
         is_resume = True
     else:
-        # Phase 8のベースモデルを探す
-        p8_checkpoints = glob.glob(os.path.join(save_dir, "p8_selfplay_*.zip"))
+        print("[*] Phase 9: FL Mastery - Starting NEW training with expanded network...")
 
-        # Phase 8がなければPhase 7を探す
-        if not p8_checkpoints:
-            p8_checkpoints = glob.glob(os.path.join(save_dir, "p7_parallel_*.zip"))
+        # Phase 9: 大容量ネットワーク (881次元入力を処理)
+        policy_kwargs = dict(
+            net_arch=dict(
+                pi=[512, 256, 128],   # Policy: 3層・大容量
+                vf=[512, 256, 128],   # Value: 3層・独立
+            ),
+        )
 
-        print("[*] No Phase 8.5 checkpoint found. Starting new training...")
         model = MaskablePPO(
             "MultiInputPolicy",
             env,
+            policy_kwargs=policy_kwargs,
             verbose=1,
-            learning_rate=1e-4,
-            gamma=0.99,
-            n_steps=2048,
-            batch_size=256,
-            tensorboard_log="./logs/phase85_full_fl/"
+            learning_rate=3e-4,       # 大きめの初期学習率
+            gamma=0.998,              # 超長期視野（FL連鎖の価値を最大化）
+            n_steps=8192,             # 大量データで安定更新
+            batch_size=1024,          # 大バッチ
+            n_epochs=5,               # 更新回数を減らして安定性確保
+            ent_coef=0.03,            # 高エントロピーでFL探索を促進
+            clip_range=0.2,
+            max_grad_norm=0.5,
+            tensorboard_log="./logs/phase9_fl_mastery/"
         )
-
-        if p8_checkpoints:
-            base_model = max(p8_checkpoints, key=lambda f: int(f.split('_')[-1].replace('.zip', '')))
-            print(f"[*] Loading weights from: {base_model}")
-            if load_manual_weights(model, base_model):
-                print("[*] Successfully loaded base weights.")
-            else:
-                print("[*] Failed to load base weights, starting from scratch.")
 
     set_global_opponent_manager(opponent_manager, model)
 
     callback = Phase85Callback(
-        "models/p85_full_fl",
+        "models/p9_fl_mastery",
         notifier,
         cloud_storage,
         opponent_manager,
@@ -672,7 +711,7 @@ def train_phase85_full_fl(
         reset_num_timesteps = True
         print(f"[*] Starting Phase 8.5 from step 0.")
 
-    print(f"\nStarting Phase 8.5 Full FL Training (Goal: {total_timesteps:,} steps)")
+    print(f"\nStarting Phase 9 FL Mastery Training (Goal: {total_timesteps:,} steps)")
     print("=" * 60)
 
     try:
@@ -691,12 +730,12 @@ def train_phase85_full_fl(
                 'fl_entry_rate': np.mean(callback.fl_entries) * 100 if callback.fl_entries else 0,
                 'fl_stay_rate': np.mean(callback.fl_stays) * 100 if callback.fl_stays else 0,
                 'win_rate': callback.wins / (callback.wins + callback.losses + callback.draws) * 100 if callback.total_games > 0 else 0,
-                'model_path': f"models/p85_full_fl_{total_timesteps}.zip"
+                'model_path': f"models/p9_fl_mastery_{total_timesteps}.zip"
             })
 
     except KeyboardInterrupt:
         print("\n[!] Training interrupted by user")
-        model.save("models/p85_full_fl_interrupted")
+        model.save("models/p9_fl_mastery_interrupted")
     except Exception as e:
         import traceback
         print(f"[ERROR] {e}")
@@ -708,15 +747,18 @@ def train_phase85_full_fl(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Phase 8.5 Full FL Training")
+    parser = argparse.ArgumentParser(description="Phase 9 FL Mastery Training")
     parser.add_argument("--test-mode", action="store_true", help="Run in test mode (10k steps)")
     parser.add_argument("--steps", type=int, default=20_000_000, help="Total training steps")
     parser.add_argument("--envs", type=int, default=None, help="Number of parallel environments")
+    parser.add_argument("--pretrained", type=str, default=None,
+                        help="Path to pre-trained model (from pretrain_imitation.py)")
 
     args = parser.parse_args()
 
     train_phase85_full_fl(
         total_timesteps=args.steps,
         test_mode=args.test_mode,
-        num_envs=args.envs
+        num_envs=args.envs,
+        pretrained_path=args.pretrained,
     )

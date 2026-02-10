@@ -46,13 +46,16 @@ except ImportError:
 @dataclass
 class MCTSConfig:
     """MCTS設定パラメータ"""
-    num_simulations: int = 200      # シミュレーション回数
+    num_simulations: int = 100      # シミュレーション回数（速度重視）
     exploration_weight: float = 1.4  # UCB探索係数
     fl_weight: float = 0.6           # FL価値の重み (0-1)
+    fl_approach_bonus: float = 0.0   # FL接近状態ボーナス（TopにQ/K/Aがある時）
     policy_temperature: float = 1.0  # Policy温度パラメータ
-    max_time_ms: int = 1000          # 最大思考時間(ms)
+    max_time_ms: int = 500           # 最大思考時間(ms)
     use_policy_prior: bool = True    # Policy事前確率を使用
     use_fl_solver: bool = True       # FLソルバーを使用
+    use_nn_value: bool = True        # NN Value関数をrollout backupに使用
+    nn_value_weight: float = 0.5     # NN Value vs MC rolloutの混合比率
     rollout_depth: int = 10          # ロールアウト深さ
     parallel_rollouts: int = 4       # 並列ロールアウト数
 
@@ -245,6 +248,8 @@ class MCTSFLAgent:
         """
         シミュレーション（ロールアウト）を実行
 
+        AlphaGoスタイル: C++ MC評価 + NN Value関数の混合
+
         Returns:
             評価値（スコア + FL価値）
         """
@@ -275,7 +280,7 @@ class MCTSFLAgent:
         # 残りターン数
         remaining_turns = max(0, 5 - cloned.current_turn())
 
-        # C++ MCTSノード評価
+        # C++ MCTSノード評価（ヒューリスティック + FL期待値）
         eval_result = ofc.evaluate_mcts_node(
             board,
             remaining_deck,
@@ -283,18 +288,101 @@ class MCTSFLAgent:
             self.config.fl_weight
         )
 
-        # モンテカルロロールアウト（オプション）
-        if remaining_turns > 0 and self.config.rollout_depth > 0:
-            mc_score = ofc.monte_carlo_evaluation(
-                board,
-                used_mask,
-                self.config.parallel_rollouts,
-                int(time.time() * 1000) % 1000000
-            )
-            # ロールアウトスコアとMCTS評価を統合
-            return 0.3 * eval_result.total_value + 0.7 * mc_score
+        # NN Value関数を使用（AlphaGoスタイル）
+        nn_value = 0.0
+        if self.config.use_nn_value and self.model is not None:
+            try:
+                obs = self._create_observation(cloned, player_idx)
+                obs_tensor = {
+                    key: torch.tensor(np.expand_dims(val, 0), dtype=torch.float32)
+                    for key, val in obs.items()
+                }
+                with torch.no_grad():
+                    features = self.model.policy.extract_features(obs_tensor)
+                    if hasattr(self.model.policy, 'mlp_extractor'):
+                        _, latent_vf = self.model.policy.mlp_extractor(features)
+                    else:
+                        latent_vf = features
+                    nn_value = float(self.model.policy.value_net(latent_vf).squeeze())
+            except Exception:
+                nn_value = 0.0
 
-        return eval_result.total_value
+        # モンテカルロロールアウト
+        mc_value = eval_result.total_value
+        if remaining_turns > 0 and self.config.rollout_depth > 0:
+            try:
+                mc_score = ofc.monte_carlo_evaluation(
+                    board,
+                    used_mask,
+                    self.config.parallel_rollouts,
+                    int(time.time() * 1000) % 1000000
+                )
+                mc_value = 0.3 * eval_result.total_value + 0.7 * mc_score
+            except Exception:
+                pass
+
+        # FL接近ボーナス: TopにQ/K/A がある状態を評価
+        fl_bonus = 0.0
+        if self.config.fl_approach_bonus > 0:
+            fl_bonus = self._evaluate_fl_approach(board)
+
+        # MC評価 + NN Value関数の混合
+        if self.config.use_nn_value and self.model is not None:
+            w = self.config.nn_value_weight
+            return w * nn_value + (1.0 - w) * mc_value + fl_bonus
+        return mc_value + fl_bonus
+
+    def _evaluate_fl_approach(self, board: Any) -> float:
+        """
+        TopのFL接近度を評価してボーナスを返す (ビットマスクベース)
+
+        Rank体系: ACE=0, TWO=1, ..., QUEEN=11, KING=12
+        FL条件: QQ+(QUEEN/KING/ACE pair) or Trips on Top
+
+        - TopにQ/K/Aが1枚: +approach_bonus * 0.4
+        - TopにQ/K/Aペア(FL確定): +approach_bonus * 1.0
+        - TopにTrips(任意): +approach_bonus * 1.5
+        """
+        bonus = self.config.fl_approach_bonus
+        try:
+            top_mask = board.top_mask()
+            if top_mask == 0:
+                return 0.0
+
+            # top_maskからランクを抽出 (4 suits per rank, +2 jokers at idx 52,53)
+            # card index = rank * 4 + suit (0-51), jokers at 52,53
+            ranks = []
+            for i in range(54):
+                if (top_mask >> i) & 1:
+                    if i < 52:
+                        ranks.append(i // 4)  # ACE=0..KING=12
+                    else:
+                        ranks.append(13)  # Joker
+
+            if not ranks:
+                return 0.0
+
+            # FL対象ランク: ACE(0), QUEEN(11), KING(12)
+            fl_ranks = [r for r in ranks if r in (0, 11, 12)]
+
+            # ペア/Trips判定
+            from collections import Counter
+            rank_counts = Counter(ranks)
+            max_count = max(rank_counts.values())
+
+            if max_count >= 3:
+                return bonus * 1.5  # Trips on top (any rank)
+            elif max_count >= 2:
+                # ペアのランクがFL対象か確認
+                pair_rank = [r for r, c in rank_counts.items() if c >= 2][0]
+                if pair_rank in (0, 11, 12):  # ACE, QUEEN, KING
+                    return bonus * 1.0  # FL-qualifying pair
+                return 0.0  # Non-FL pair (JJ etc.)
+            elif len(fl_ranks) >= 1:
+                return bonus * 0.4  # Single FL-rank card approaching
+            return 0.0
+        except Exception:
+            return 0.0
 
     def _backpropagate(self, node: MCTSNode, value: float):
         """値をルートまで逆伝播"""
@@ -584,19 +672,25 @@ class MCTSFLAgent:
             if not (visible_mask & (1 << i)):
                 unseen_prob[i] = 1.0 / max(1, remaining_count)
 
-        # ゲーム状態 (11次元)
+        # ゲーム状態 (14次元 — ofc_3max_env.pyと同一)
+        next_ps = engine.player(next_idx)
+        prev_ps = engine.player(prev_idx)
+        fl_hand_count = len(hand) if ps.in_fantasy_land else 0
         game_state = np.array([
             engine.current_turn(),
             ps.board.count(ofc.TOP),
             ps.board.count(ofc.MIDDLE),
             ps.board.count(ofc.BOTTOM),
-            engine.player(next_idx).board.count(ofc.TOP),
-            engine.player(next_idx).board.count(ofc.MIDDLE),
-            engine.player(next_idx).board.count(ofc.BOTTOM),
-            engine.player(prev_idx).board.count(ofc.TOP),
-            engine.player(prev_idx).board.count(ofc.MIDDLE),
-            engine.player(prev_idx).board.count(ofc.BOTTOM),
-            1.0 if ps.in_fantasy_land else 0.0
+            next_ps.board.count(ofc.TOP),
+            next_ps.board.count(ofc.MIDDLE),
+            next_ps.board.count(ofc.BOTTOM),
+            prev_ps.board.count(ofc.TOP),
+            prev_ps.board.count(ofc.MIDDLE),
+            prev_ps.board.count(ofc.BOTTOM),
+            1.0 if ps.in_fantasy_land else 0.0,
+            float(fl_hand_count),
+            1.0 if next_ps.in_fantasy_land else 0.0,
+            1.0 if prev_ps.in_fantasy_land else 0.0,
         ], dtype=np.float32)
 
         # ポジション情報 (3次元 one-hot)

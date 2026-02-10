@@ -59,7 +59,7 @@ class OFC3MaxEnv(AECEnv):
     BOT_SIZE = 5
     TOTAL_SLOTS = 13
     
-    def __init__(self, render_mode=None, enable_fl_turns=True, continuous_games=False):
+    def __init__(self, render_mode=None, enable_fl_turns=True, continuous_games=False, fl_solver_mode='default'):
         """
         OFC 3-Max環境の初期化
 
@@ -67,12 +67,14 @@ class OFC3MaxEnv(AECEnv):
             render_mode: 描画モード ('human' or None)
             enable_fl_turns: FLターンを有効にするか (Trueの場合、FL突入者は最適配置)
             continuous_games: 連続ゲームモード (FL状態を引き継ぐ)
+            fl_solver_mode: FLソルバーモード ('default' or 'greedy')
         """
         super().__init__()
 
         self.render_mode = render_mode
         self.enable_fl_turns = enable_fl_turns
         self.continuous_games = continuous_games
+        self.fl_solver_mode = fl_solver_mode
 
         # プレイヤー設定（3人）
         self.possible_agents = ["player_0", "player_1", "player_2"]
@@ -100,6 +102,10 @@ class OFC3MaxEnv(AECEnv):
         self.fl_games_played = 0
         self.fl_entries_total = 0
         self.fl_stays_total = 0
+
+        # FL接近ステージ追跡（報酬シェーピング用）
+        # 0: なし, 1: Q/K/A 1枚 on Top, 2: FL資格ペア(QQ/KK/AA), 3: Trips
+        self._fl_approach_stage = {agent: 0 for agent in self.possible_agents}
 
         # アクション空間（5枚配置: 3^5 = 243）
         self._action_spaces = {
@@ -200,6 +206,9 @@ class OFC3MaxEnv(AECEnv):
 
         self.current_street = 1
 
+        # FL接近ステージリセット
+        self._fl_approach_stage = {agent: 0 for agent in self.possible_agents}
+
         # ボタン設定
         if options and 'button_position' in options:
             self.button_position = options['button_position']
@@ -228,9 +237,16 @@ class OFC3MaxEnv(AECEnv):
             if not ps.in_fantasy_land:
                 ordered_agents.append(agent)
 
-        # 全員がFLの場合は空のリスト（すぐにショーダウン）
+        # 全員がFLの場合 → 全員ボード完成、即SHOWDOWN
         if not ordered_agents:
-            ordered_agents = [self.possible_agents[0]]  # ダミー（即終了）
+            # C++エンジンの advance_game_state() で SHOWDOWN に遷移済みのはず
+            # 念のためPython側でも終了処理
+            self._calculate_final_rewards()
+            for a in self.agents:
+                self.terminations[a] = True
+            self._accumulate_rewards()
+            # AgentSelectorにはダミーを設定（実際には使われない）
+            ordered_agents = [self.possible_agents[0]]
 
         self._agent_selector = AgentSelector(ordered_agents)
         self.agent_selection = self._agent_selector.next()
@@ -244,33 +260,34 @@ class OFC3MaxEnv(AECEnv):
             ps = self.engine.player(i)
             fl_cards = ps.get_hand()  # FLの場合はFL手札が返される
             if ps.in_fantasy_land and len(fl_cards) >= 14:
-                # FantasySolverで最適配置を取得
                 try:
-                    solution = ofc.solve_fantasy_land(fl_cards, already_in_fl=True)
-
-                    # FLActionを作成
                     fl_action = ofc.FLAction()
-                    rows = [ofc.TOP, ofc.MIDDLE, ofc.BOTTOM]
 
-                    # Top (3枚)
-                    for j, card in enumerate(solution.top[:3]):
-                        fl_action.set_placement(j, card, ofc.TOP)
+                    if self.fl_solver_mode == 'greedy':
+                        # Greedy solver (高速、学習用)
+                        from greedy_fl_solver import greedy_solve_fl
+                        top, mid, bot, discards, score, stayed = greedy_solve_fl(
+                            fl_cards, ofc, already_in_fl=True
+                        )
+                        for j, card in enumerate(top[:3]):
+                            fl_action.set_placement(j, card, ofc.TOP)
+                        for j, card in enumerate(mid[:5]):
+                            fl_action.set_placement(3 + j, card, ofc.MIDDLE)
+                        for j, card in enumerate(bot[:5]):
+                            fl_action.set_placement(8 + j, card, ofc.BOTTOM)
+                        fl_action.discards = discards
+                    else:
+                        # C++ brute-force solver (正確、評価用)
+                        solution = ofc.solve_fantasy_land(fl_cards, already_in_fl=True)
+                        for j, card in enumerate(solution.top[:3]):
+                            fl_action.set_placement(j, card, ofc.TOP)
+                        for j, card in enumerate(solution.mid[:5]):
+                            fl_action.set_placement(3 + j, card, ofc.MIDDLE)
+                        for j, card in enumerate(solution.bot[:5]):
+                            fl_action.set_placement(8 + j, card, ofc.BOTTOM)
+                        fl_action.discards = solution.discards
 
-                    # Middle (5枚)
-                    for j, card in enumerate(solution.mid[:5]):
-                        fl_action.set_placement(3 + j, card, ofc.MIDDLE)
-
-                    # Bottom (5枚)
-                    for j, card in enumerate(solution.bot[:5]):
-                        fl_action.set_placement(8 + j, card, ofc.BOTTOM)
-
-                    # 捨て札
-                    fl_action.discards = solution.discards
-
-                    # アクション適用
                     self.engine.apply_fl_action(i, fl_action)
-
-                    # FL統計を記録
                     self.fl_cards_count[agent] = len(fl_cards)
                 except Exception as e:
                     print(f"[FL] Error processing FL for {agent}: {e}")
@@ -288,58 +305,94 @@ class OFC3MaxEnv(AECEnv):
             self._cumulative_rewards = {agent: 0 for agent in self.possible_agents}
 
         if self.terminations.get(self.agent_selection, False) or self.truncations.get(self.agent_selection, False):
-            self._was_dead_step(action)
+            self._was_dead_step(None)  # PettingZoo requires None for dead agents
             return
 
         agent = self.agent_selection
         player_idx = self.agent_name_mapping[agent]
 
+        # ボード満杯チェック: 13枚配置済みまたはFL中の場合はアクション不要
+        ps = self.engine.player(player_idx)
+        if ps.board.total_placed() >= 13 or ps.in_fantasy_land:
+            # 全プレイヤーのボード完了チェック
+            all_complete = all(
+                self.engine.player(self.agent_name_mapping[a]).board.total_placed() >= 13
+                for a in self.possible_agents
+            )
+
+            phase = self.engine.phase()
+            if all_complete or phase in [ofc.GamePhase.SHOWDOWN, ofc.GamePhase.COMPLETE]:
+                # 全員完成 or エンジンがSHOWDOWN → ゲーム終了
+                self._calculate_final_rewards()
+                for a in self.agents:
+                    self.terminations[a] = True
+                self._accumulate_rewards()
+                for a in self.agents:
+                    self.observations[a] = self._get_observation(a)
+            else:
+                # このプレイヤーのみ完了、他は進行中 → 次のエージェントへ
+                # _was_dead_stepは使えない（terminated=Falseのため）
+                self.agent_selection = self._agent_selector.next()
+            return
+
         # 報酬リセット
         self.rewards = {a: 0 for a in self.agents}
-        
+
         # アクション適用
         if self.current_street == 1:
             success = self._apply_initial_action(player_idx, action)
         else:
             success = self._apply_turn_action(player_idx, action)
-        
+
         if not success:
             self.rewards[agent] = -10.0
             self.infos[agent]['invalid_action'] = True
-        
+        else:
+            # === 中間報酬シェイピング (Potential-based) ===
+            # Street 1（初期配置）からFL接近報酬を適用
+            self._apply_intermediate_reward(agent, player_idx)
+
         # ゲーム終了チェック
         phase = self.engine.phase()
         if phase in [ofc.GamePhase.SHOWDOWN, ofc.GamePhase.COMPLETE]:
             self._calculate_final_rewards()
             for a in self.agents:
                 self.terminations[a] = True
-        
+
         # 累積報酬更新
         self._accumulate_rewards()
-        
+
         # 観測更新
         for a in self.agents:
             self.observations[a] = self._get_observation(a)
-        
+
         if not all(self.terminations.values()):
             prev_street = self.current_street
             self.current_street = self.engine.current_turn()
 
             if self.current_street > prev_street:
-                # FLプレイヤーを除外してターン順を作成
+                # FLプレイヤーとボード満杯プレイヤーを除外してターン順を作成
                 start_idx = (self.button_position + 1) % self.NUM_PLAYERS
                 ordered_agents = []
                 for i in range(self.NUM_PLAYERS):
-                    agent = self.possible_agents[(start_idx + i) % self.NUM_PLAYERS]
-                    player_idx = self.agent_name_mapping[agent]
-                    ps = self.engine.player(player_idx)
-                    # FLプレイヤー以外を順序に追加
-                    if not ps.in_fantasy_land:
-                        ordered_agents.append(agent)
+                    a = self.possible_agents[(start_idx + i) % self.NUM_PLAYERS]
+                    pidx = self.agent_name_mapping[a]
+                    p = self.engine.player(pidx)
+                    # FLプレイヤーとボード完成プレイヤー以外を順序に追加
+                    if not p.in_fantasy_land and p.board.total_placed() < 13:
+                        ordered_agents.append(a)
 
                 if ordered_agents:
                     self._agent_selector = AgentSelector(ordered_agents)
                     self.agent_selection = self._agent_selector.next()
+                else:
+                    # 全員完成 → 強制ショーダウンチェック
+                    phase = self.engine.phase()
+                    if phase in [ofc.GamePhase.SHOWDOWN, ofc.GamePhase.COMPLETE]:
+                        self._calculate_final_rewards()
+                        for a in self.agents:
+                            self.terminations[a] = True
+                        self._accumulate_rewards()
             else:
                 self.agent_selection = self._agent_selector.next()
     
@@ -416,6 +469,96 @@ class OFC3MaxEnv(AECEnv):
         
         return self.engine.apply_turn_action(player_idx, turn_action)
     
+    def _get_fl_approach_stage(self, board) -> int:
+        """TopのFL接近ステージを評価 (0-3)"""
+        top_count = board.count(ofc.TOP)
+        if top_count == 0:
+            return 0
+
+        # Stage 3: Trips on Top
+        if top_count >= 3:
+            top_val = board.evaluate_top()
+            if top_val.rank == ofc.HandRank.THREE_OF_A_KIND:
+                return 3
+
+        # Stage 2: FL資格ペア (QQ/KK/AA)
+        if top_count >= 2 and board.qualifies_for_fl():
+            return 2
+
+        # Stage 1: TopにQ/K/A/Jokerが1枚以上
+        top_mask = board.top_mask()
+        for i in range(54):
+            if (top_mask >> i) & 1:
+                if i < 52:
+                    rank = i // 4  # ACE=0, QUEEN=11, KING=12
+                    if rank in (0, 11, 12):
+                        return 1
+                else:
+                    return 1  # Joker
+
+        return 0
+
+    def _apply_intermediate_reward(self, agent: str, player_idx: int):
+        """
+        中間報酬シェイピング (Phase 9: FL死ぬ気版)
+
+        FL突入を絶対最優先で報酬。ファウルリスクを取ってでもFL追求する価値を学習させる。
+        1. FL進行ステージ報酬: 大幅増額
+        2. ファウル接近ペナルティ: FL追求中は軽減
+        3. Bottom/Middle強化ボーナス: FLとファウル回避を両立するための報酬
+        """
+        ps = self.engine.player(player_idx)
+        board = ps.board
+        shaping_reward = 0.0
+
+        top_count = board.count(ofc.TOP)
+        mid_count = board.count(ofc.MIDDLE)
+        bot_count = board.count(ofc.BOTTOM)
+
+        # === 1. FL進行ステージ報酬（最重要・大幅増額） ===
+        new_stage = self._get_fl_approach_stage(board)
+        old_stage = self._fl_approach_stage.get(agent, 0)
+
+        if new_stage > old_stage:
+            if new_stage >= 1 and old_stage < 1:
+                # Q/K/A/JokerがTopに → FL追求開始
+                shaping_reward += 5.0
+            if new_stage >= 2 and old_stage < 2:
+                # FL資格ペア形成 (QQ/KK/AA) → 決定的瞬間
+                shaping_reward += 10.0
+            if new_stage >= 3 and old_stage < 3:
+                # Trips on Top → FL確定 + Stay条件
+                shaping_reward += 8.0
+            self._fl_approach_stage[agent] = new_stage
+
+        # === 2. ファウル接近ペナルティ（FL追求中は軽減）===
+        fl_pursuing = (new_stage >= 1)  # FL追求中フラグ
+        foul_penalty_scale = 0.2 if fl_pursuing else 0.5  # FL追求中はペナルティ軽減
+
+        if top_count >= 2 and mid_count >= 3:
+            top_val = board.evaluate_top()
+            mid_val = board.evaluate_mid()
+            if mid_val < top_val:
+                shaping_reward -= foul_penalty_scale
+        if mid_count >= 3 and bot_count >= 3:
+            mid_val = board.evaluate_mid()
+            bot_val = board.evaluate_bot()
+            if bot_val < mid_val:
+                shaping_reward -= foul_penalty_scale
+
+        # === 3. Bottom/Middle強化ボーナス ===
+        # FL追求中にBottom/Middleを強くすることでファウル回避とFL両立を促す
+        if fl_pursuing and bot_count >= 3:
+            bot_val = board.evaluate_bot()
+            # ストレート以上のBottom → FL+ファウル回避の良い兆候
+            if bot_val.rank >= ofc.HandRank.STRAIGHT:
+                shaping_reward += 2.0
+            # フルハウス以上 → FL Stay条件に近づく(4カード以上で Stay)
+            if bot_val.rank >= ofc.HandRank.FULL_HOUSE:
+                shaping_reward += 3.0
+
+        self.rewards[agent] += shaping_reward
+
     def _calculate_final_rewards(self):
         """3人分の最終報酬を計算（C++側で計算済み）"""
         result = self.engine.result()
@@ -426,15 +569,23 @@ class OFC3MaxEnv(AECEnv):
             stayed_fl = result.stayed_fl(i)
             fouled = result.is_fouled(i)
 
-            # FL突入ボーナス (Phase 8用強化: Superhuman Strategy)
-            # Top QQ+ でFLに入った瞬間に +15.0 の巨大な報酬を与える
+            # FL突入ボーナス (Phase 9: FL死ぬ気版)
+            # FL突入は圧倒的に価値がある: 次ゲーム14-17枚で高得点ほぼ確実
             if entered_fl:
-                score += 15.0
+                score += 50.0  # FL突入 = 最高報酬
                 self.fl_entries_total += 1
+                # Ultimate Rules: 高いTop = より多いFL枚数 = 追加ボーナス
+                ps = self.engine.player(i)
+                top_eval = ps.board.evaluate_top()
+                fl_cards = ofc.fantasy_land_cards(top_eval)
+                if fl_cards >= 16:  # AA以上
+                    score += 10.0
+                if fl_cards >= 17:  # Trips
+                    score += 10.0
 
-            # FL継続ボーナス (連続ゲームでFLを維持)
+            # FL継続ボーナス (連続FL = 超高価値)
             if stayed_fl:
-                score += 10.0
+                score += 60.0  # FL継続は突入より価値が高い
                 self.fl_stays_total += 1
 
             self.rewards[agent] = score
@@ -617,45 +768,55 @@ class OFC3MaxEnv(AECEnv):
         ps = self.engine.player(player_idx)
         hand = ps.get_hand()
         board = ps.board
-        
+
+        # ボード満杯またはFL中 → アクション不要（ダミー返却）
+        if board.total_placed() >= 13 or ps.in_fantasy_land:
+            return [0]
+
+        # 手札なし → アクション不要
+        if len(hand) == 0:
+            return [0]
+
         valid_actions = []
-        
+
         if self.current_street == 1:
             # 初回5枚配置
+            if len(hand) < 5:
+                return [0]
             for action in range(243):
                 placements = []
                 temp = action
                 for _ in range(5):
                     placements.append(temp % 3)
                     temp //= 3
-                
+
                 top_count = placements.count(0)
                 mid_count = placements.count(1)
                 bot_count = placements.count(2)
-                
+
                 if top_count <= self.TOP_SIZE and mid_count <= self.MID_SIZE and bot_count <= self.BOT_SIZE:
                     valid_actions.append(action)
         else:
             # 通常ターン
+            if len(hand) < 3:
+                return [0]
             for discard_idx in range(min(3, len(hand))):
                 for placement_action in range(9):
                     row1 = placement_action % 3
                     row2 = placement_action // 3
-                    
+
                     top_new = board.count(ofc.TOP) + [row1, row2].count(0)
                     mid_new = board.count(ofc.MIDDLE) + [row1, row2].count(1)
                     bot_new = board.count(ofc.BOTTOM) + [row1, row2].count(2)
-                    
+
                     if top_new <= self.TOP_SIZE and mid_new <= self.MID_SIZE and bot_new <= self.BOT_SIZE:
                         # Compact 27-action space: row1 + row2*3 + discard*9
                         action = (discard_idx * 9) + (row2 * 3) + row1
                         valid_actions.append(action)
-        
+
         if not valid_actions:
-            print(f"[Env] Warning: No valid actions for {agent} at street {self.current_street}. Board: {board.total_placed()} cards.")
-            # Fallback: just return the first possible if any, or 0
             valid_actions = [0]
-            
+
         return valid_actions
     
     def action_masks(self, agent):

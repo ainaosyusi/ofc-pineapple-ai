@@ -54,7 +54,7 @@ PYBIND11_MODULE(ofc_engine, m) {
       .value("BOTTOM", ofc::BOTTOM)
       .export_values();
 
-  py::enum_<ofc::HandRank>(m, "HandRank")
+  py::enum_<ofc::HandRank>(m, "HandRank", py::arithmetic())
       .value("HIGH_CARD", ofc::HIGH_CARD)
       .value("ONE_PAIR", ofc::ONE_PAIR)
       .value("TWO_PAIR", ofc::TWO_PAIR)
@@ -255,6 +255,7 @@ PYBIND11_MODULE(ofc_engine, m) {
       .def("apply_fl_action", &ofc::GameEngine::apply_fl_action)
       .def("phase", &ofc::GameEngine::phase)
       .def("current_turn", &ofc::GameEngine::current_turn)
+      .def("current_player", &ofc::GameEngine::current_player)
       .def("num_players", &ofc::GameEngine::num_players)
       .def("player", &ofc::GameEngine::player,
            py::return_value_policy::reference)

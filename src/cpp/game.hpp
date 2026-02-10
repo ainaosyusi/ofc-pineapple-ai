@@ -287,6 +287,7 @@ public:
   // アクセサ
   GamePhase phase() const { return phase_; }
   int current_turn() const { return current_turn_; }
+  int current_player() const { return current_player_; }
   int num_players() const { return num_players_; }
   const PlayerState &player(int idx) const { return players_[idx]; }
   PlayerState &player_mut(int idx) { return players_[idx]; }
@@ -459,6 +460,23 @@ private:
 
   // ゲーム状態を進める
   void advance_game_state() {
+    // 全プレイヤーのボードが完成済みなら即SHOWDOWN
+    // (全員FL時にcurrent_turn_が不足する問題への対策)
+    {
+      bool all_boards_complete = true;
+      for (int p = 0; p < num_players_; ++p) {
+        if (players_[p].board.total_placed() < 13) {
+          all_boards_complete = false;
+          break;
+        }
+      }
+      if (all_boards_complete) {
+        phase_ = PHASE_SHOWDOWN;
+        calculate_scores();
+        return;
+      }
+    }
+
     // 全プレイヤーがこのフェーズのアクションを完了したかチェック
     bool all_ready = true;
 

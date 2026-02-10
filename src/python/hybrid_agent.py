@@ -47,25 +47,33 @@ from endgame_solver import EndgameSolver
 class HybridConfig:
     """ハイブリッドエージェント設定
 
-    Note: 現時点ではEndgame SolverとMCTSはPure NNより性能が悪いため、
-    デフォルトでは無効化されています。将来の改善後に有効化してください。
+    Phase 9 Hybrid Agent:
+    - EndgameSolver: 残り5スロット以下で全探索（実ゲームスコアリング準拠）
+    - MCTS: FL機会・ファウルリスクの重要局面で深読み
+    - NN: 通常プレイ
     """
-    # 終盤ソルバー設定 (デフォルト無効化)
+    # 終盤ソルバー設定
     endgame_threshold: int = 2          # 残りターン数がこれ以下で終盤ソルバー
-    endgame_max_remaining: int = 0      # 0=無効。残り配置スロット数
+    endgame_max_remaining: int = 5      # 残り5スロット以下でSolver発動
 
-    # MCTS設定 (デフォルト無効化)
-    mcts_simulations: int = 200         # MCTSシミュレーション数
-    mcts_time_limit_ms: int = 1000      # MCTS時間制限
+    # MCTS設定
+    mcts_simulations: int = 100         # MCTSシミュレーション数（速度重視）
+    mcts_time_limit_ms: int = 500       # MCTS時間制限
     mcts_fl_weight: float = 0.6         # FL重み
 
-    # 重要局面判定 (デフォルト無効化 - 閾値を高く設定)
-    critical_fl_threshold: float = 1.0  # FL確率がこれ以上で重要 (1.0=無効)
-    critical_royalty_threshold: int = 100 # 現在ロイヤリティがこれ以上で重要
-    critical_foul_risk: float = 1.0     # ファウルリスクがこれ以上で重要 (1.0=無効)
+    # 重要局面判定
+    critical_fl_threshold: float = 0.3  # FL確率30%以上で重要局面
+    critical_royalty_threshold: int = 8  # 現在ロイヤリティ8以上で重要局面
+    critical_foul_risk: float = 0.4     # ファウルリスク40%以上で重要局面
 
     # NN設定
     nn_temperature: float = 0.8         # 低めで確定的に
+
+    # D2: 温度スケジューリング
+    use_temperature_schedule: bool = True   # 温度スケジューリングを有効化
+    temp_initial: float = 1.0              # 序盤の温度（探索的）
+    temp_final: float = 0.3               # 終盤の温度（確定的）
+    temp_schedule_type: str = 'linear'     # 'linear' or 'cosine'
 
     # 一般設定
     verbose: bool = False               # デバッグ出力
@@ -341,41 +349,19 @@ class HybridInferenceAgent:
     def _act_endgame(self, engine: Any, player_idx: int) -> int:
         """終盤ソルバーでアクションを選択
 
-        改善版: NNの選択を検証し、明らかな問題がある場合のみSolverで上書き
+        残りスロットが少ない場合、Solverは全探索で理論上の最適解を返す。
+        実ゲームスコアリング準拠の評価関数を使用するため、
+        Solverの解をNNより優先する。
         """
-        # まずNNの選択を取得
-        nn_action = self._act_nn(engine, player_idx)
-
         if not self.endgame_solver.can_solve(engine, player_idx):
-            return nn_action
+            return self._act_nn(engine, player_idx)
 
-        # Solverの選択を取得
         solver_action, solver_score = self.endgame_solver.solve(engine, player_idx)
 
-        # NNの選択をシミュレート
-        nn_score = self._simulate_action_score(engine, player_idx, nn_action)
-
         if self.config.verbose:
-            print(f"[Endgame] NN={nn_action}(score={nn_score:.1f}), Solver={solver_action}(score={solver_score:.1f})")
+            print(f"[Endgame] Solver action={solver_action}, score={solver_score:.1f}")
 
-        # 判断ロジック:
-        # 1. NNの選択がファウルを引き起こす場合はSolverを使用
-        # 2. Solverの方がはるかに良い場合はSolverを使用
-        # 3. それ以外はNNを信頼
-        if nn_score < -50.0 and solver_score > nn_score + 20.0:
-            # NNがファウルを選び、Solverがより良い選択肢を持つ
-            if self.config.verbose:
-                print(f"[Endgame] Using Solver (NN would foul)")
-            return solver_action
-
-        if solver_score > nn_score + 30.0:
-            # Solverがはるかに良いスコア
-            if self.config.verbose:
-                print(f"[Endgame] Using Solver (much better score)")
-            return solver_action
-
-        # NNを信頼
-        return nn_action
+        return solver_action
 
     def _simulate_action_score(self, engine: Any, player_idx: int, action: int) -> float:
         """アクションをシミュレートしてスコアを評価"""
@@ -431,9 +417,50 @@ class HybridInferenceAgent:
                 print(f"[Hybrid] MCTS failed ({e}), falling back to NN")
             return self._act_nn(engine, player_idx)
 
+    def _get_scheduled_temperature(self, engine: Any) -> float:
+        """
+        D2: ゲーム進行に応じた温度を計算
+
+        序盤（Street 1）: 高温度（探索的）→ より多様な配置を検討
+        終盤（Street 5）: 低温度（確定的）→ 最善手に集中
+        """
+        if not self.config.use_temperature_schedule:
+            return self.config.nn_temperature
+
+        # ゲーム進行度 (0.0 = 序盤, 1.0 = 終盤)
+        current_turn = engine.current_turn() if HAS_ENGINE else 1
+        progress = min(1.0, max(0.0, (current_turn - 1) / 4.0))  # Street 1-5 → 0.0-1.0
+
+        t_init = self.config.temp_initial
+        t_final = self.config.temp_final
+
+        if self.config.temp_schedule_type == 'cosine':
+            # コサインスケジューリング（序盤をより長く探索的に保つ）
+            import math
+            temperature = t_final + 0.5 * (t_init - t_final) * (1 + math.cos(math.pi * progress))
+        else:
+            # 線形スケジューリング
+            temperature = t_init + (t_final - t_init) * progress
+
+        return temperature
+
     def _act_nn(self, engine: Any, player_idx: int) -> int:
-        """NNでアクションを選択"""
+        """NNでアクションを選択（温度スケジューリング付き）"""
         try:
+            # D2: 温度スケジューリング適用
+            if self.config.use_temperature_schedule and HAS_ENGINE and HAS_MODEL and self.model is not None:
+                temperature = self._get_scheduled_temperature(engine)
+                if self.config.verbose:
+                    print(f"[Hybrid] Temperature: {temperature:.2f} (turn {engine.current_turn()})")
+
+                # 温度付き推論: deterministicではなくtemperatureで制御
+                if temperature < 0.05:
+                    # 十分低温度ならdeterministic
+                    return self.nn_agent.select_action(engine, player_idx, deterministic=True)
+
+                # カスタム温度推論
+                return self._nn_action_with_temperature(engine, player_idx, temperature)
+
             return self.nn_agent.select_action(
                 engine, player_idx,
                 deterministic=True
@@ -443,6 +470,49 @@ class HybridInferenceAgent:
             if self.config.verbose:
                 print(f"[Hybrid] NN failed ({e}), using random action")
             return self._random_action(engine, player_idx)
+
+    def _nn_action_with_temperature(self, engine: Any, player_idx: int, temperature: float) -> int:
+        """温度パラメータ付きのNN推論"""
+        # 観測とマスクを取得
+        mcts_agent_ref = MCTSFLAgent.__new__(MCTSFLAgent)
+        obs = mcts_agent_ref._create_observation(engine, player_idx)
+        valid_actions = mcts_agent_ref._get_valid_actions(engine, player_idx)
+
+        action_mask = np.zeros(243, dtype=bool)
+        for a in valid_actions:
+            action_mask[a] = True
+
+        obs_tensor = {
+            key: torch.tensor(np.expand_dims(val, 0), dtype=torch.float32)
+            for key, val in obs.items()
+        }
+
+        with torch.no_grad():
+            policy = self.model.policy
+            features = policy.extract_features(obs_tensor)
+            if hasattr(policy, 'mlp_extractor'):
+                latent_pi, _ = policy.mlp_extractor(features)
+            else:
+                latent_pi = features
+
+            logits = policy.action_net(latent_pi)
+            mask_tensor = torch.tensor(action_mask, dtype=torch.bool).unsqueeze(0)
+            logits = logits.masked_fill(~mask_tensor, -float('inf'))
+
+            # 温度スケーリング
+            scaled_logits = logits / max(temperature, 0.01)
+            probs = torch.softmax(scaled_logits, dim=-1).squeeze(0).numpy()
+
+        # 確率的サンプリング（ただし最善手への偏りを温度で制御）
+        if temperature < 0.3:
+            # 低温度ではargmax
+            return int(np.argmax(probs))
+        else:
+            # 温度に応じた確率的選択
+            valid_probs = probs[action_mask]
+            valid_probs = valid_probs / valid_probs.sum()
+            chosen_idx = np.random.choice(len(valid_actions), p=valid_probs)
+            return valid_actions[chosen_idx]
 
     def _random_action(self, engine: Any, player_idx: int) -> int:
         """ランダムアクション（最終フォールバック）"""
@@ -541,7 +611,7 @@ class TournamentHybridAgent(HybridInferenceAgent):
     トーナメント用の最適化されたハイブリッドエージェント
 
     より慎重なパラメータ設定:
-    - 終盤ソルバーを早めに発動
+    - 終盤ソルバーを早めに発動（残り8スロット）
     - MCTSシミュレーション数を増加
     - ファウル回避を最優先
     """
@@ -557,8 +627,8 @@ class TournamentHybridAgent(HybridInferenceAgent):
             endgame_max_remaining=8,
 
             # MCTSをより深く
-            mcts_simulations=400,
-            mcts_time_limit_ms=2000,
+            mcts_simulations=200,
+            mcts_time_limit_ms=1000,
             mcts_fl_weight=0.7,
 
             # 重要局面の閾値を下げる（より頻繁にMCTS）
@@ -568,6 +638,12 @@ class TournamentHybridAgent(HybridInferenceAgent):
 
             # 確定的に
             nn_temperature=0.5,
+
+            # D2: トーナメント用温度スケジューリング（より確定的）
+            use_temperature_schedule=True,
+            temp_initial=0.7,
+            temp_final=0.1,
+            temp_schedule_type='cosine',
         )
         super().__init__(model_path, model, config)
 

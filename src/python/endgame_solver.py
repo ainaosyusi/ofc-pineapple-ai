@@ -212,118 +212,185 @@ class EndgameSolver:
     
     def _evaluate_final_score(self, engine: 'ofc.GameEngine', player: int) -> float:
         """
-        盤面の最終スコアを評価
+        盤面の最終スコアを評価（実ゲームスコアリング準拠）
 
-        改善版評価関数:
-        1. ファウルを厳しくペナルティ
-        2. 行の強さの順序（Bottom > Middle > Top）を確認
-        3. 潜在的なファウルリスクを評価
-        4. FL資格の考慮
-        5. ロイヤリティ bonus
+        C++ GameEngine の calculate_heads_up_score() と同じロジック:
+        1. ファウル判定 → ファウル時は -6*相手数 - 相手royalty
+        2. 3行比較（Top/Middle/Bottom）で各+1/-1
+        3. スクープボーナス（3行全勝で+3）
+        4. ロイヤリティ交換（自分royalty - 相手royalty）
+        5. FL突入のEV加算
+
+        未完成ボード（終盤ソルバーの途中評価）の場合:
+        - 完成行同士は実際のスコアリングで比較
+        - 未完成行はファウルリスクを考慮した推定値
         """
         player_state = engine.player(player)
         board = player_state.board
+        num_players = engine.num_players()
 
-        # === 1. 即座にファウルならば大きなペナルティ ===
+        # === 1. ファウル判定（実際のゲームスコアリング公式） ===
         if board.is_foul():
-            return -100.0
+            # P1ファウル時: 各相手に -(6 + 相手royalty) を支払う
+            foul_penalty = 0.0
+            for i in range(num_players):
+                if i == player:
+                    continue
+                opp_board = engine.player(i).board
+                if opp_board.is_foul():
+                    # 両者ファウル: 相殺（0点）
+                    pass
+                else:
+                    opp_royalty = opp_board.calculate_royalties() if opp_board.is_complete() else 0
+                    foul_penalty -= (6 + opp_royalty)
+            return foul_penalty
 
-        # === 2. 各行の評価値を取得 ===
-        top_val = board.evaluate_top()
-        mid_val = board.evaluate_mid()
-        bot_val = board.evaluate_bot()
-
+        # === 2. ボード完成度チェック ===
         top_count = board.count(ofc.Row.TOP)
         mid_count = board.count(ofc.Row.MIDDLE)
         bot_count = board.count(ofc.Row.BOTTOM)
+        is_complete = board.is_complete()
 
-        score = 0.0
+        # 未完成でファウルリスクが高い場合のペナルティ
+        if not is_complete:
+            top_val = board.evaluate_top() if top_count >= 2 else None
+            mid_val = board.evaluate_mid() if mid_count >= 3 else None
+            bot_val = board.evaluate_bot() if bot_count >= 3 else None
 
-        # === 3. 完成した行の順序チェック（ファウル予防） ===
-        # Bottom > Middle の確認（両方5枚以上の場合）
-        if bot_count >= 5 and mid_count >= 5:
-            if bot_val < mid_val:
-                # Bottom < Middle = 確定ファウル
-                return -100.0
-            elif bot_val == mid_val:
-                # 同じ強さ = 危険
-                score -= 30.0
+            # 部分評価でファウル確定/危険を検出
+            if bot_val and mid_val and bot_val < mid_val:
+                if bot_count >= 5 and mid_count >= 5:
+                    return self._foul_penalty(engine, player)  # 確定ファウル
+            if mid_val and top_val and mid_val < top_val:
+                if mid_count >= 5 and top_count >= 3:
+                    return self._foul_penalty(engine, player)  # 確定ファウル
 
-        # Middle > Top の確認（両方完成の場合）
-        if mid_count >= 5 and top_count >= 3:
-            if mid_val < top_val:
-                # Middle < Top = 確定ファウル
-                return -100.0
-            elif mid_val == top_val:
-                # 同じ強さ = 危険
-                score -= 30.0
+        # === 3. 実ゲームスコアリング: ヘッズアップ計算 ===
+        own_royalty = board.calculate_royalties() if is_complete else 0
+        total_score = 0.0
 
-        # === 4. 潜在的ファウルリスクの評価 ===
-        # Topが強くなりすぎている場合のリスク
+        for i in range(num_players):
+            if i == player:
+                continue
+
+            opp_board = engine.player(i).board
+            opp_complete = opp_board.is_complete()
+
+            # 相手がファウルの場合
+            if opp_complete and opp_board.is_foul():
+                total_score += 6 + own_royalty
+                continue
+
+            # 通常対決: 3行比較
+            line_wins = 0
+            line_losses = 0
+
+            if is_complete and opp_complete:
+                # Top比較
+                t1 = board.evaluate_top()
+                t2 = opp_board.evaluate_top()
+                if t1 > t2:
+                    line_wins += 1
+                elif t2 > t1:
+                    line_losses += 1
+
+                # Middle比較
+                m1 = board.evaluate_mid()
+                m2 = opp_board.evaluate_mid()
+                if m1 > m2:
+                    line_wins += 1
+                elif m2 > m1:
+                    line_losses += 1
+
+                # Bottom比較
+                b1 = board.evaluate_bot()
+                b2 = opp_board.evaluate_bot()
+                if b1 > b2:
+                    line_wins += 1
+                elif b2 > b1:
+                    line_losses += 1
+
+                # ライン点数
+                line_diff = line_wins - line_losses
+                total_score += line_diff
+
+                # スクープボーナス
+                if line_wins == 3:
+                    total_score += 3
+                elif line_losses == 3:
+                    total_score -= 3
+
+                # ロイヤリティ交換
+                opp_royalty = opp_board.calculate_royalties()
+                total_score += own_royalty - opp_royalty
+
+            elif is_complete:
+                # 自分完成、相手未完成: 推定スコア（自分のroyalty基準）
+                total_score += own_royalty * 0.5
+
+            else:
+                # 両方未完成: ファウルリスクに基づく推定
+                foul_risk = self._estimate_partial_foul_risk(board,
+                                                             top_count, mid_count, bot_count)
+                total_score -= foul_risk * 10.0
+
+        # === 4. FL突入のEV加算 ===
+        if is_complete and board.qualifies_for_fl():
+            fl_cards = board.fl_card_count()
+            # C++ mcts.hpp の FL_EXPECTED_SCORE 定数と同じ値
+            fl_ev = {14: 18.0, 15: 22.0, 16: 26.0, 17: 32.0}
+            total_score += fl_ev.get(fl_cards, 18.0)
+        elif not is_complete and top_count >= 2:
+            # 未完成だがFL可能性がある場合は部分的なボーナス
+            top_val = board.evaluate_top()
+            if top_val and top_val.rank == ofc.HandRank.THREE_OF_A_KIND:
+                total_score += 25.0  # Trips: 高確率でFL
+            elif top_val and top_val.rank == ofc.HandRank.ONE_PAIR:
+                # QQ以上のペアのみFL対象
+                if board.qualifies_for_fl():
+                    fl_cards = board.fl_card_count()
+                    fl_ev = {14: 18.0, 15: 22.0, 16: 26.0, 17: 32.0}
+                    total_score += fl_ev.get(fl_cards, 18.0) * 0.8  # 確率調整
+
+        return total_score
+
+    def _foul_penalty(self, engine: 'ofc.GameEngine', player: int) -> float:
+        """ファウル時の実際のペナルティを計算"""
+        num_players = engine.num_players()
+        penalty = 0.0
+        for i in range(num_players):
+            if i == player:
+                continue
+            opp_board = engine.player(i).board
+            if opp_board.is_foul():
+                pass  # 両者ファウル: 相殺
+            else:
+                opp_royalty = opp_board.calculate_royalties() if opp_board.is_complete() else 0
+                penalty -= (6 + opp_royalty)
+        return penalty
+
+    def _estimate_partial_foul_risk(self, board, top_count: int,
+                                     mid_count: int, bot_count: int) -> float:
+        """未完成ボードのファウルリスクを推定 (0.0-1.0)"""
+        risk = 0.0
+
         if top_count >= 2 and mid_count >= 3:
-            # 部分的な評価でリスクを判定
+            top_val = board.evaluate_top()
+            mid_val = board.evaluate_mid()
             if mid_val < top_val:
-                # 既にTopがMiddleより強い = 非常に危険
-                score -= 50.0
+                risk += 0.6  # Middle < Top: 高リスク
             elif mid_val == top_val:
-                # 同等 = やや危険
-                score -= 20.0
+                risk += 0.3
 
-        # MiddleがBottomより強くなりそうな場合
         if mid_count >= 3 and bot_count >= 3:
+            mid_val = board.evaluate_mid()
+            bot_val = board.evaluate_bot()
             if bot_val < mid_val:
-                # 既にBottomがMiddleより弱い = 危険
-                score -= 40.0
+                risk += 0.5  # Bottom < Middle: 高リスク
             elif bot_val == mid_val:
-                score -= 15.0
+                risk += 0.2
 
-        # === 5. 安全マージンのボーナス ===
-        # 行間に十分な強さの差がある場合はボーナス
-        if bot_count >= 5 and mid_count >= 5:
-            # BottomがMiddleより明確に強い
-            if bot_val > mid_val:
-                score += 10.0
-                # HandRankの差もチェック
-                if bot_val.rank.value > mid_val.rank.value:
-                    score += 5.0
-
-        if mid_count >= 5 and top_count >= 3:
-            # MiddleがTopより明確に強い
-            if mid_val > top_val:
-                score += 10.0
-                if mid_val.rank.value > top_val.rank.value:
-                    score += 5.0
-
-        # === 6. FL資格のボーナス ===
-        if board.qualifies_for_fl():
-            score += 15.0
-        elif top_count >= 2:
-            # FL資格の可能性をチェック
-            top_rank = top_val.rank
-            if top_rank == ofc.HandRank.THREE_OF_A_KIND:
-                score += 12.0  # Trips = FL確定
-            elif top_rank == ofc.HandRank.ONE_PAIR:
-                # ペアの強さによるボーナス
-                score += 5.0
-
-        # === 7. ロイヤリティボーナス ===
-        royalty = board.calculate_royalties()
-        score += float(royalty) * 2.0  # ロイヤリティを重視
-
-        # === 8. ハンドランクのボーナス ===
-        # 各行のハンドランクに基づくスコア
-        if bot_count >= 5:
-            score += bot_val.rank.value * 1.5
-        if mid_count >= 5:
-            score += mid_val.rank.value * 1.0
-        if top_count >= 3:
-            score += top_val.rank.value * 0.5
-
-        # === 9. 完成度ボーナス ===
-        if board.is_complete():
-            score += 20.0  # 完成ボーナス
-
-        return score
+        return min(1.0, risk)
     
     def _generate_row_combinations(self, n: int, limits: List[int]):
         """n枚のカードを3行に分配する全組み合わせを生成"""
