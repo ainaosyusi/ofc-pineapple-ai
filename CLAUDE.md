@@ -163,18 +163,19 @@ DISCORD_WEBHOOK_URL=...       # Notifications every 100k steps
 - Checkpoint auto-cleanup keeps latest 2 + every 1M milestone
 - Training auto-resumes from latest checkpoint
 
-## Current Performance (Phase 9 FL Mastery - Final)
+## Current Performance (Phase 10 FL Stay - Final)
 
-| Metric | Phase 9 (250M) | Phase 9 (150M) | Target |
+| Metric | Phase 9 (250M) | Phase 10 (150M) | Change |
 |--------|------------------:|---------------------:|-------:|
-| Foul Rate | 16.8% | 17.6% | < 20% ✅ |
-| Mean Score | +12.66 | +12.58 | > +10 ✅ |
-| FL Entry Rate | 22.8% | 21.2% | > 15% ✅ |
-| FL Stay Rate | 8.0% | 8.2% | > 5% ✅ |
-| Win Rate | 75.8% | 75.4% | > 70% ✅ |
+| Foul Rate | 27.2% | **18.0%** | -9.2% |
+| Mean Score | +17.92 | **+36.08** | +18.16 |
+| Mean Royalty | +3.00 | **+6.10** | +3.10 |
+| FL Entry Rate | 17.8% | **33.6%** | +15.8% |
+| FL Stay Rate | 5.0% | **15.8%** | +10.8% |
+| Win Rate | 53.0% | **55.2%** | +2.2% |
 
-**Latest Model**: `models/phase9/p9_fl_mastery_250000000.zip`
-**ONNX Model**: `models/onnx/ofc_ai.onnx` (2.47MB, for Node.js inference)
+**Latest Model**: `models/phase10_gcp/p10_fl_stay_150000000.zip`
+**ONNX Model**: `models/onnx/ofc_ai.onnx` (Phase 9 version, needs update)
 
 ### Greedy FL Solver
 
