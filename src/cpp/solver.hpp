@@ -87,7 +87,7 @@ private:
 
       int r = calculate_bottom_royalty(b_v.rank) +
               calculate_middle_royalty(m_v.rank) +
-              calculate_top_royalty(t_v.rank, static_cast<Rank>(t_v.kickers));
+              calculate_top_royalty(t_v.rank, get_top_pair_rank(t_v));
 
       float s = static_cast<float>(r);
       bool stayed = false;

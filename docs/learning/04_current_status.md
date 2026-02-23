@@ -76,7 +76,7 @@ Phase 1 → Phase 2 → ... → Phase 8.5b → Phase 9 → Phase 10
 | モデル | ステップ | 説明 |
 |:-------|:--------:|:-----|
 | `models/phase10_gcp/p10_fl_stay_150000000.zip` | 150M | **最新推奨** |
-| `models/onnx/ofc_ai.onnx` | - | Node.js統合用 (Phase 9ベース) |
+| `models/onnx/ofc_ai_v2.onnx` | - | Node.js統合用 (Phase 10, logits) |
 
 ### Phase 10 チェックポイント
 
@@ -105,7 +105,7 @@ Phase 1 → Phase 2 → ... → Phase 8.5b → Phase 9 → Phase 10
 6. [x] **Phase 9 FL Mastery完了 (250M steps)**
 7. [x] **ONNX変換・mix-poker-app統合**
 8. [x] **Phase 10 FL Stay向上完了 (150M steps)**
-9. [ ] Phase 10 ONNX変換・mix-poker-app更新
+9. [x] **Phase 10 ONNX変換・mix-poker-app更新** (v2.0.0, logits出力)
 10. [ ] 対人テスト・UI改善
 11. [ ] Phase 11: Hold'em AI (将来)
 
@@ -115,11 +115,11 @@ Phase 1 → Phase 2 → ... → Phase 8.5b → Phase 9 → Phase 10
 
 ### mix-poker-app 統合
 
-OFC AI v1.1.0が `mix-poker-app` に統合済み:
-- ONNX形式でNode.jsから直接推論
+OFC AI v2.0.0が `mix-poker-app` に統合済み:
+- ONNX形式でNode.jsから直接推論 (logits出力)
 - 推論速度: 10-50ms/手
 - ファイル: `mix-poker-app/server/models/ofc_ai.onnx`
-- **TODO**: Phase 10モデルでONNX更新
+- Phase 10 FL Stay (150M steps) モデル
 
 ### GCPインスタンス
 

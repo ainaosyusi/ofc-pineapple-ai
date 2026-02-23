@@ -47,23 +47,21 @@
 
 ---
 
+## 完了したタスク
+
+### Phase 10 ONNX変換・mix-poker-app更新 ✅
+
+- `models/onnx/ofc_ai_v2.onnx` (2.47MB, logits出力)
+- mix-poker-app に配置済み: `server/models/ofc_ai.onnx`
+- OFCBot.ts バージョン: v2.0.0 (Phase 10 FL Stay 150M)
+
 ## 次のタスク
 
-### 1. Phase 10 ONNX変換・mix-poker-app更新
-
-```bash
-# ONNX変換
-python scripts/export_onnx.py --model models/phase10_gcp/p10_fl_stay_150000000.zip --output models/onnx/ofc_ai_v2.onnx
-
-# mix-poker-app にコピー
-cp models/onnx/ofc_ai_v2.onnx /Users/naoai/Desktop/mix-poker-app/server/models/ofc_ai.onnx
-```
-
-### 2. 対人テスト
+### 1. 対人テスト
 
 Phase 10モデルをmix-poker-appでテストプレイ
 
-### 3. Phase 11 (将来)
+### 2. Phase 11 (将来)
 
 Hold'em AI
 
@@ -98,7 +96,8 @@ Hold'em AI
 | `models/phase10_gcp/p10_fl_stay_100000000.zip` | 100M | Phase 10 中間 |
 | `models/phase10_gcp/p10_fl_stay_50000000.zip` | 50M | Phase 10 初期 |
 | `models/phase9/p9_fl_mastery_250000000.zip` | 250M | Phase 9 |
-| `models/onnx/ofc_ai.onnx` | - | ONNX (Phase 9ベース) |
+| `models/onnx/ofc_ai_v2.onnx` | - | ONNX (Phase 10, logits出力) ⭐ |
+| `models/onnx/ofc_ai.onnx` | - | ONNX (Phase 9ベース, 旧) |
 
 ---
 

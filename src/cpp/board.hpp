@@ -187,12 +187,11 @@ public:
     // Top
     HandValue top_val = evaluate_top();
     if (top_val.rank == THREE_OF_A_KIND) {
-      total += 10 + top_val.kickers; // 222=10, ..., AAA=22
+      Rank trips_rank = get_top_trips_rank(top_val);
+      total += calculate_top_royalty(THREE_OF_A_KIND, trips_rank);
     } else if (top_val.rank == ONE_PAIR) {
-      Rank pair_rank = static_cast<Rank>(top_val.kickers);
-      if (pair_rank >= SIX) {
-        total += static_cast<int>(pair_rank) - static_cast<int>(SIX) + 1;
-      }
+      Rank pair_rank = get_top_pair_rank(top_val);
+      total += calculate_top_royalty(ONE_PAIR, pair_rank);
     }
 
     // Middle

@@ -318,7 +318,7 @@ TEST(test_royalty_top_aa) {
 
 TEST(test_royalty_top_trips) {
   int royalty = calculate_top_royalty(THREE_OF_A_KIND, TWO);
-  ASSERT_EQ(royalty, 11); // 222 = 10 + 1 = 11点
+  ASSERT_EQ(royalty, 10); // 222 = 10点 (JOPT標準)
 }
 
 TEST(test_royalty_middle_flush) {
@@ -404,25 +404,42 @@ TEST(test_board_foul_detection) {
 // ============================================
 
 TEST(test_fl_qualification_qq) {
-  HandValue top_qq(ONE_PAIR, QUEEN);
+  // QQ+2 on top → FL入り (14枚)
+  Board b;
+  b.place_card(TOP, Card(SPADE, QUEEN));
+  b.place_card(TOP, Card(HEART, QUEEN));
+  b.place_card(TOP, Card(SPADE, TWO));
+  HandValue top_qq = b.evaluate_top();
   ASSERT_TRUE(qualifies_for_fantasy_land(top_qq));
   ASSERT_EQ(fantasy_land_cards(top_qq), 14);
 }
 
 TEST(test_fl_qualification_kk) {
-  HandValue top_kk(ONE_PAIR, KING);
+  Board b;
+  b.place_card(TOP, Card(SPADE, KING));
+  b.place_card(TOP, Card(HEART, KING));
+  b.place_card(TOP, Card(SPADE, TWO));
+  HandValue top_kk = b.evaluate_top();
   ASSERT_TRUE(qualifies_for_fantasy_land(top_kk));
   ASSERT_EQ(fantasy_land_cards(top_kk), 15);
 }
 
 TEST(test_fl_qualification_aa) {
-  HandValue top_aa(ONE_PAIR, ACE);
+  Board b;
+  b.place_card(TOP, Card(SPADE, ACE));
+  b.place_card(TOP, Card(HEART, ACE));
+  b.place_card(TOP, Card(SPADE, TWO));
+  HandValue top_aa = b.evaluate_top();
   ASSERT_TRUE(qualifies_for_fantasy_land(top_aa));
   ASSERT_EQ(fantasy_land_cards(top_aa), 16);
 }
 
 TEST(test_fl_qualification_trips) {
-  HandValue top_trips(THREE_OF_A_KIND, TWO);
+  Board b;
+  b.place_card(TOP, Card(SPADE, TWO));
+  b.place_card(TOP, Card(HEART, TWO));
+  b.place_card(TOP, Card(DIAMOND, TWO));
+  HandValue top_trips = b.evaluate_top();
   ASSERT_TRUE(qualifies_for_fantasy_land(top_trips));
   ASSERT_EQ(fantasy_land_cards(top_trips), 17);
 }

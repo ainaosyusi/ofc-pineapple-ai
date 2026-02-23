@@ -22,10 +22,11 @@ def test_joker_eval():
     # ====================================================================
     mask = (1 << card_idx(SPADE, A)) | (1 << JOKER1) | (1 << JOKER2)
     val = ofc.evaluate_3card(mask)
-    if val.rank == ofc.HandRank.THREE_OF_A_KIND and val.kickers == A:
+    # kickers now uses comparison rank (ACE=14)
+    if val.rank == ofc.HandRank.THREE_OF_A_KIND and val.kickers == 14:
         print(f"✅ Test 1: [As, JK, JK] -> THREE_OF_A_KIND (A)")
     else:
-        print(f"❌ Test 1: Expected THREE_OF_A_KIND(A), got {val.rank}({val.kickers})")
+        print(f"❌ Test 1: Expected THREE_OF_A_KIND(cmp_rank=14), got {val.rank}({val.kickers})")
         all_passed = False
     
     # ====================================================================

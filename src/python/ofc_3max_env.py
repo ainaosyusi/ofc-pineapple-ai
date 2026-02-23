@@ -59,7 +59,8 @@ class OFC3MaxEnv(AECEnv):
     BOT_SIZE = 5
     TOTAL_SLOTS = 13
     
-    def __init__(self, render_mode=None, enable_fl_turns=True, continuous_games=False, fl_solver_mode='default'):
+    def __init__(self, render_mode=None, enable_fl_turns=True, continuous_games=False,
+                 fl_solver_mode='default', reward_config=None, extended_fl_obs=False):
         """
         OFC 3-Max環境の初期化
 
@@ -68,6 +69,8 @@ class OFC3MaxEnv(AECEnv):
             enable_fl_turns: FLターンを有効にするか (Trueの場合、FL突入者は最適配置)
             continuous_games: 連続ゲームモード (FL状態を引き継ぐ)
             fl_solver_mode: FLソルバーモード ('default' or 'greedy')
+            reward_config: 報酬パラメータ辞書 (None=デフォルト値)
+            extended_fl_obs: FL関連の追加観測特徴量を有効にする
         """
         super().__init__()
 
@@ -75,6 +78,19 @@ class OFC3MaxEnv(AECEnv):
         self.enable_fl_turns = enable_fl_turns
         self.continuous_games = continuous_games
         self.fl_solver_mode = fl_solver_mode
+        self.extended_fl_obs = extended_fl_obs
+
+        # 報酬パラメータ（デフォルト値 = Phase 10と同じ）
+        rc = reward_config or {}
+        self.rc_fl_entry_bonus = rc.get('fl_entry_bonus', 50.0)
+        self.rc_fl_stay_bonus = rc.get('fl_stay_bonus', 60.0)
+        self.rc_fl_stage1_reward = rc.get('fl_stage1_reward', 5.0)
+        self.rc_fl_stage2_reward = rc.get('fl_stage2_reward', 10.0)
+        self.rc_fl_stage3_reward = rc.get('fl_stage3_reward', 8.0)
+        self.rc_foul_penalty_fl = rc.get('foul_penalty_fl', 0.2)
+        self.rc_foul_penalty_normal = rc.get('foul_penalty_normal', 0.5)
+        self.rc_fl_aa_bonus = rc.get('fl_aa_bonus', 10.0)
+        self.rc_fl_trips_bonus = rc.get('fl_trips_bonus', 10.0)
 
         # プレイヤー設定（3人）
         self.possible_agents = ["player_0", "player_1", "player_2"]
@@ -112,7 +128,22 @@ class OFC3MaxEnv(AECEnv):
             agent: spaces.Discrete(243) for agent in self.possible_agents
         }
 
-        # 観測空間 (FL手札スロット追加: 17枚分)
+        # 観測空間
+        # game_stateの次元数: 基本14 + 拡張FL観測6 = 最大20
+        if self.extended_fl_obs:
+            game_state_high = np.array([
+                5, 3, 5, 5, 3, 5, 5, 3, 5, 5, 1, 17, 1, 1,
+                # 拡張FL観測 (6次元)
+                4,   # live_queens: 残りQ枚数 (0-4)
+                4,   # live_kings: 残りK枚数 (0-4)
+                4,   # live_aces: 残りA枚数 (0-4)
+                2,   # live_jokers: 残りJoker枚数 (0-2)
+                10,  # top_fl_outs: TopでQQ+になるアウツ数
+                1,   # top_has_fl_card: TopにQ/K/A/Jokerがあるか
+            ], dtype=np.float32)
+        else:
+            game_state_high = np.array([5, 3, 5, 5, 3, 5, 5, 3, 5, 5, 1, 17, 1, 1], dtype=np.float32)
+
         self._observation_spaces = {
             agent: spaces.Dict({
                 'my_board': spaces.MultiBinary(3 * self.NUM_CARDS),          # 162
@@ -126,9 +157,9 @@ class OFC3MaxEnv(AECEnv):
                 'position_info': spaces.MultiBinary(self.NUM_PLAYERS),       # 3 (one-hot)
                 'game_state': spaces.Box(
                     low=0,
-                    high=np.array([5, 3, 5, 5, 3, 5, 5, 3, 5, 5, 1, 17, 1, 1], dtype=np.float32),
+                    high=game_state_high,
                     dtype=np.float32
-                ),  # 追加: FL手札枚数, FL中フラグ (next/prev)
+                ),
             }) for agent in self.possible_agents
         }
     
@@ -522,18 +553,18 @@ class OFC3MaxEnv(AECEnv):
         if new_stage > old_stage:
             if new_stage >= 1 and old_stage < 1:
                 # Q/K/A/JokerがTopに → FL追求開始
-                shaping_reward += 5.0
+                shaping_reward += self.rc_fl_stage1_reward
             if new_stage >= 2 and old_stage < 2:
                 # FL資格ペア形成 (QQ/KK/AA) → 決定的瞬間
-                shaping_reward += 10.0
+                shaping_reward += self.rc_fl_stage2_reward
             if new_stage >= 3 and old_stage < 3:
                 # Trips on Top → FL確定 + Stay条件
-                shaping_reward += 8.0
+                shaping_reward += self.rc_fl_stage3_reward
             self._fl_approach_stage[agent] = new_stage
 
         # === 2. ファウル接近ペナルティ（FL追求中は軽減）===
         fl_pursuing = (new_stage >= 1)  # FL追求中フラグ
-        foul_penalty_scale = 0.2 if fl_pursuing else 0.5  # FL追求中はペナルティ軽減
+        foul_penalty_scale = self.rc_foul_penalty_fl if fl_pursuing else self.rc_foul_penalty_normal
 
         if top_count >= 2 and mid_count >= 3:
             top_val = board.evaluate_top()
@@ -569,23 +600,22 @@ class OFC3MaxEnv(AECEnv):
             stayed_fl = result.stayed_fl(i)
             fouled = result.is_fouled(i)
 
-            # FL突入ボーナス (Phase 9: FL死ぬ気版)
-            # FL突入は圧倒的に価値がある: 次ゲーム14-17枚で高得点ほぼ確実
+            # FL突入ボーナス
             if entered_fl:
-                score += 50.0  # FL突入 = 最高報酬
+                score += self.rc_fl_entry_bonus
                 self.fl_entries_total += 1
                 # Ultimate Rules: 高いTop = より多いFL枚数 = 追加ボーナス
                 ps = self.engine.player(i)
                 top_eval = ps.board.evaluate_top()
                 fl_cards = ofc.fantasy_land_cards(top_eval)
                 if fl_cards >= 16:  # AA以上
-                    score += 10.0
+                    score += self.rc_fl_aa_bonus
                 if fl_cards >= 17:  # Trips
-                    score += 10.0
+                    score += self.rc_fl_trips_bonus
 
-            # FL継続ボーナス (連続FL = 超高価値)
+            # FL継続ボーナス
             if stayed_fl:
-                score += 60.0  # FL継続は突入より価値が高い
+                score += self.rc_fl_stay_bonus
                 self.fl_stays_total += 1
 
             self.rewards[agent] = score
@@ -662,7 +692,7 @@ class OFC3MaxEnv(AECEnv):
         # FL手札枚数を取得（通常は0-5、FL中は14-17）
         hand = ps.get_hand()
         fl_hand_count = len(hand) if ps.in_fantasy_land else 0
-        game_state = np.array([
+        base_state = [
             self.current_street,
             ps.board.count(ofc.TOP),
             ps.board.count(ofc.MIDDLE),
@@ -677,7 +707,13 @@ class OFC3MaxEnv(AECEnv):
             fl_hand_count,  # FL手札枚数
             1 if next_ps.in_fantasy_land else 0,  # 下家がFL中か
             1 if prev_ps.in_fantasy_land else 0,  # 上家がFL中か
-        ], dtype=np.float32)
+        ]
+
+        if self.extended_fl_obs:
+            fl_obs = self._calculate_fl_outs(player_idx)
+            base_state.extend(fl_obs)
+
+        game_state = np.array(base_state, dtype=np.float32)
         
         return {
             'my_board': my_board,
@@ -690,6 +726,100 @@ class OFC3MaxEnv(AECEnv):
             'game_state': game_state,
         }
     
+    def _calculate_fl_outs(self, player_idx):
+        """FL関連の追加観測特徴量を計算 (extended_fl_obs=True用)
+
+        Returns:
+            [live_queens, live_kings, live_aces, live_jokers, top_fl_outs, top_has_fl_card]
+        """
+        ps = self.engine.player(player_idx)
+        board = ps.board
+
+        # 見えているカードを収集
+        seen = set()
+        # 自分のボード
+        all_mask = board.all_mask()
+        for i in range(self.NUM_CARDS):
+            if (all_mask >> i) & 1:
+                seen.add(i)
+        # 自分の手札
+        for card in ps.get_hand():
+            seen.add(card.index)
+        # 自分の捨て札
+        agent = self.possible_agents[player_idx]
+        for i in range(self.NUM_CARDS):
+            if self.player_discards[agent][i]:
+                seen.add(i)
+        # 相手のボード
+        for i in range(self.NUM_PLAYERS):
+            if i != player_idx:
+                opp = self.engine.player(i)
+                opp_mask = opp.board.all_mask()
+                for j in range(self.NUM_CARDS):
+                    if (opp_mask >> j) & 1:
+                        seen.add(j)
+
+        # ランクインデックス: ACE=0, 2=1, ..., QUEEN=11, KING=12
+        # カードインデックス: suit * 13 + rank (suit: 0=spade, 1=heart, 2=diamond, 3=club)
+        QUEEN_RANK = 11
+        KING_RANK = 12
+        ACE_RANK = 0
+
+        # ライブカード数を計算
+        live_queens = sum(1 for s in range(4) if s * 13 + QUEEN_RANK not in seen)
+        live_kings = sum(1 for s in range(4) if s * 13 + KING_RANK not in seen)
+        live_aces = sum(1 for s in range(4) if s * 13 + ACE_RANK not in seen)
+        live_jokers = sum(1 for j in [52, 53] if j not in seen)
+
+        # TopにFL対象カードがあるか
+        top_mask = board.top_mask()
+        top_has_fl_card = 0
+        top_fl_ranks = {}  # rank -> count on top
+        for i in range(54):
+            if (top_mask >> i) & 1:
+                if i >= 52:  # Joker
+                    top_has_fl_card = 1
+                else:
+                    rank = i % 13
+                    if rank in (ACE_RANK, QUEEN_RANK, KING_RANK):
+                        top_has_fl_card = 1
+                    top_fl_ranks[rank] = top_fl_ranks.get(rank, 0) + 1
+
+        # FLアウツ計算: TopでQQ+ペアを作れるカード数
+        top_fl_outs = 0
+        top_count = board.count(ofc.TOP)
+
+        if top_count < 3:  # まだTopに空きがある
+            # 既にTopにあるFL対象カードとペアになれるライブカード数
+            for rank, count in top_fl_ranks.items():
+                if rank == QUEEN_RANK:
+                    if count >= 2:
+                        top_fl_outs = 10  # 既にQQ+確定
+                    elif count == 1:
+                        top_fl_outs += live_queens
+                elif rank == KING_RANK:
+                    if count >= 2:
+                        top_fl_outs = 10
+                    elif count == 1:
+                        top_fl_outs += live_kings
+                elif rank == ACE_RANK:
+                    if count >= 2:
+                        top_fl_outs = 10
+                    elif count == 1:
+                        top_fl_outs += live_aces
+
+            # Jokerもペア相手として使える
+            if top_has_fl_card and top_count >= 1:
+                top_fl_outs += live_jokers
+
+        # 既にFL資格あり
+        if board.qualifies_for_fl():
+            top_fl_outs = 10
+
+        top_fl_outs = min(top_fl_outs, 10)
+
+        return [live_queens, live_kings, live_aces, live_jokers, top_fl_outs, top_has_fl_card]
+
     def _calculate_unseen_probability(self, player_idx):
         """見えていないカードの残存確率を計算"""
         seen = np.zeros(self.NUM_CARDS, dtype=np.int8)

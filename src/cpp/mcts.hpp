@@ -74,7 +74,7 @@ inline FLProbabilityResult calculate_fl_probability(
             result.total_prob = 1.0f;
             result.expected_ev = FL_EXPECTED_SCORE_17;
         } else if (top_val.rank == ONE_PAIR) {
-            Rank pair_rank = static_cast<Rank>(top_val.kickers);
+            Rank pair_rank = get_top_pair_rank(top_val);
             if (pair_rank == ACE) {
                 result.prob_aa = 1.0f;
                 result.total_prob = 1.0f;
@@ -217,7 +217,7 @@ inline MCTSEvaluation evaluate_mcts_node(
         HandValue top_val = board.evaluate_top();
         eval.base_score += calculate_top_royalty(
             top_val.rank,
-            static_cast<Rank>(top_val.kickers)
+            get_top_pair_rank(top_val)
         );
     }
 
@@ -437,7 +437,7 @@ inline PlacementEvaluation evaluate_placement(
         HandValue top_val = new_board.evaluate_top();
         eval.immediate_value = calculate_top_royalty(
             top_val.rank,
-            static_cast<Rank>(top_val.kickers)
+            get_top_pair_rank(top_val)
         );
         // FL突入は大きなボーナス
         if (qualifies_for_fantasy_land(top_val)) {

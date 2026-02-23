@@ -3,6 +3,10 @@
  *
  * OFC用の役判定エンジン。
  * Top(3枚)とMid/Bottom(5枚)の役を高速に判定し、ロイヤリティを計算。
+ *
+ * ランク比較値 (cmp_rank):
+ *   ACE=14(最強), KING=13, QUEEN=12, ..., TWO=2
+ *   内部表現(ACE=0)とは異なり、正しいポーカーの強さ順を反映。
  */
 
 #ifndef OFC_EVALUATOR_HPP
@@ -37,7 +41,7 @@ enum HandRank : uint8_t {
 
 struct HandValue {
   HandRank rank;
-  uint32_t kickers; // 比較用キッカー情報
+  uint32_t kickers; // 比較用キッカー情報 (cmp_rank値を使用)
 
   HandValue() : rank(HIGH_CARD), kickers(0) {}
   HandValue(HandRank r, uint32_t k = 0) : rank(r), kickers(k) {}
@@ -57,21 +61,50 @@ struct HandValue {
 };
 
 // ============================================
+// ランク比較ヘルパー
+// ============================================
+
+namespace detail {
+
+// 内部ランク(ACE=0, TWO=1, ..., KING=12) → 比較値(ACE=14, TWO=2, ..., KING=13)
+inline constexpr int to_cmp_rank(int raw_rank) {
+  return raw_rank == 0 ? 14 : raw_rank + 1;
+}
+
+// 比較値 → 内部ランク
+inline constexpr Rank from_cmp_rank(int cmp_rank) {
+  return static_cast<Rank>(cmp_rank == 14 ? 0 : cmp_rank - 1);
+}
+
+// 降順反復用: ACE(0)が最強なので最初、次にKING(12), QUEEN(11), ..., TWO(1)
+inline constexpr std::array<int, NUM_RANKS> make_rank_desc_order() {
+  return {0, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
+}
+static constexpr auto RANK_DESC = make_rank_desc_order();
+
+// kicker値をパック: 最大5つの比較値を1つのuint32_tに (各4bit, MSB=最重要)
+inline uint32_t pack5(int a, int b = 0, int c = 0, int d = 0, int e = 0) {
+  return (uint32_t(a) << 16) | (uint32_t(b) << 12) | (uint32_t(c) << 8) |
+         (uint32_t(d) << 4) | uint32_t(e);
+}
+
+} // namespace detail
+
+// ============================================
 // ロイヤリティ計算（JOPT準拠）
 // ============================================
 
 // Top (3枚) のロイヤリティ
+// pair_rank: 内部ランク値 (ACE=0, TWO=1, ..., KING=12)
 inline int calculate_top_royalty(HandRank rank, Rank pair_rank) {
   if (rank == THREE_OF_A_KIND) {
     // トリップス: 10点(222) ~ 22点(AAA)
-    // ACE=0なので特殊処理: AAA = 10 + 12 = 22点
     if (pair_rank == ACE)
       return 22;
-    return 10 + static_cast<int>(pair_rank);
+    return 10 + static_cast<int>(pair_rank) - 1; // TWO=1→10, THREE=2→11, ..., KING=12→21
   }
   if (rank == ONE_PAIR) {
     // ペア 66以上: 1点(66) ~ 9点(AA)
-    // ACE=0なので特殊処理: AA = 9点
     if (pair_rank == ACE)
       return 9;
     if (pair_rank >= SIX) {
@@ -179,7 +212,7 @@ inline int check_straight(const std::array<int, NUM_RANKS> &counts) {
       }
     }
     if (is_straight) {
-      return high; // 最高ランク
+      return high; // 最高ランク (内部値)
     }
   }
 
@@ -206,6 +239,23 @@ inline int check_straight_flush(CardMask hand) {
     }
   }
   return -1;
+}
+
+// カードの比較ランク値を降順にソートして返す (最大n個)
+inline void get_sorted_cmp_ranks(const std::array<int, NUM_RANKS> &counts,
+                                  int *out, int max_n, int exclude_rank = -1,
+                                  int exclude_rank2 = -1) {
+  int idx = 0;
+  for (int ii = 0; ii < NUM_RANKS && idx < max_n; ++ii) {
+    int r = RANK_DESC[ii];
+    if (r == exclude_rank || r == exclude_rank2)
+      continue;
+    for (int c = 0; c < counts[r] && idx < max_n; ++c) {
+      out[idx++] = to_cmp_rank(r);
+    }
+  }
+  while (idx < max_n)
+    out[idx++] = 0;
 }
 
 } // namespace detail
@@ -240,39 +290,60 @@ inline HandValue evaluate_5card(CardMask hand) {
         if (suit_counts[high - i] > 0)
           p++;
       if (p + num_jokers >= 5)
-        return HandValue(STRAIGHT_FLUSH, high);
+        return HandValue(STRAIGHT_FLUSH, to_cmp_rank(high));
     }
     // Wheel SF
     int p_wheel = (suit_counts[ACE] > 0) + (suit_counts[TWO] > 0) +
                   (suit_counts[THREE] > 0) + (suit_counts[FOUR] > 0) +
                   (suit_counts[FIVE] > 0);
     if (p_wheel + num_jokers >= 5)
-      return HandValue(STRAIGHT_FLUSH, FIVE);
+      return HandValue(STRAIGHT_FLUSH, to_cmp_rank(FIVE));
   }
 
-  // 2. フォーカード
-  for (int r = NUM_RANKS - 1; r >= 0; --r) {
-    if (counts[r] + num_jokers >= 4)
-      return HandValue(FOUR_OF_A_KIND, r);
-  }
-
-  // 3. フルハウス
-  // トリップス + ペア
-  for (int r1 = NUM_RANKS - 1; r1 >= 0; --r1) {
-    for (int r2 = NUM_RANKS - 1; r2 >= 0; --r2) {
-      if (r1 == r2)
-        continue;
-      // 必要枚数 = (3 - counts[r1]) + (2 - counts[r2])
-      int needed = std::max(0, 3 - counts[r1]) + std::max(0, 2 - counts[r2]);
-      if (needed <= num_jokers)
-        return HandValue(FULL_HOUSE, r1 * 16 + r2);
+  // 2. フォーカード (ACEが最強なのでRANK_DESC順に探索)
+  for (int ii = 0; ii < NUM_RANKS; ++ii) {
+    int r = RANK_DESC[ii];
+    if (counts[r] + num_jokers >= 4) {
+      int kickers[1] = {0};
+      get_sorted_cmp_ranks(counts, kickers, 1, r);
+      return HandValue(FOUR_OF_A_KIND, pack5(to_cmp_rank(r), kickers[0]));
     }
   }
 
-  // 4. フラッシュ
+  // 3. フルハウス (トリップス + ペア, ACEが最強順)
+  for (int ii = 0; ii < NUM_RANKS; ++ii) {
+    int r1 = RANK_DESC[ii]; // trips rank
+    for (int jj = 0; jj < NUM_RANKS; ++jj) {
+      int r2 = RANK_DESC[jj]; // pair rank
+      if (r1 == r2)
+        continue;
+      int needed = std::max(0, 3 - counts[r1]) + std::max(0, 2 - counts[r2]);
+      if (needed <= num_jokers)
+        return HandValue(FULL_HOUSE,
+                         pack5(to_cmp_rank(r1), to_cmp_rank(r2)));
+    }
+  }
+
+  // 4. フラッシュ (キッカー情報を保存)
   for (int s = 0; s < NUM_SUITS; ++s) {
-    if (count_cards(normal_cards & SUIT_MASKS[s]) + num_jokers >= 5)
-      return HandValue(FLUSH, 0);
+    int suit_count = count_cards(normal_cards & SUIT_MASKS[s]);
+    if (suit_count + num_jokers >= 5) {
+      auto suit_counts = count_ranks(normal_cards & SUIT_MASKS[s]);
+      int kickers[5] = {0};
+      int ki = 0;
+      // Jokerは最強の未使用ランクとして扱う
+      for (int j = 0; j < num_jokers && ki < 5; ++j) {
+        kickers[ki++] = 15; // any joker > ACE(14)
+      }
+      for (int jj = 0; jj < NUM_RANKS && ki < 5; ++jj) {
+        int r = RANK_DESC[jj];
+        if (suit_counts[r] > 0) {
+          kickers[ki++] = to_cmp_rank(r);
+        }
+      }
+      return HandValue(FLUSH, pack5(kickers[0], kickers[1], kickers[2],
+                                    kickers[3], kickers[4]));
+    }
   }
 
   // 5. ストレート
@@ -287,43 +358,60 @@ inline HandValue evaluate_5card(CardMask hand) {
       if (counts[high - i] > 0)
         p++;
     if (p + num_jokers >= 5)
-      return HandValue(STRAIGHT, high);
+      return HandValue(STRAIGHT, to_cmp_rank(high));
   }
   int p_wheel = (counts[ACE] > 0) + (counts[TWO] > 0) + (counts[THREE] > 0) +
                 (counts[FOUR] > 0) + (counts[FIVE] > 0);
   if (p_wheel + num_jokers >= 5)
-    return HandValue(STRAIGHT, FIVE);
+    return HandValue(STRAIGHT, to_cmp_rank(FIVE));
 
-  // 6. スリーオブアカインド
-  for (int r = NUM_RANKS - 1; r >= 0; --r) {
-    if (counts[r] + num_jokers >= 3)
-      return HandValue(THREE_OF_A_KIND, r);
-  }
-
-  // 7. ツーペア
-  // 3枚の非ジョーカーカードのうち、ペア + シングルの場合: (X,X,Y,J,J) は
-  // フルハウスになるはずなので、ここに来るのは num_jokers が少ない場合
-  for (int r1 = NUM_RANKS - 1; r1 >= 0; --r1) {
-    for (int r2 = r1 - 1; r2 >= 0; --r2) {
-      int needed = std::max(0, 2 - counts[r1]) + std::max(0, 2 - counts[r2]);
-      if (needed <= num_jokers)
-        return HandValue(TWO_PAIR, r1);
+  // 6. スリーオブアカインド (ACEが最強順)
+  for (int ii = 0; ii < NUM_RANKS; ++ii) {
+    int r = RANK_DESC[ii];
+    if (counts[r] + num_jokers >= 3) {
+      int kickers[2] = {0};
+      get_sorted_cmp_ranks(counts, kickers, 2, r);
+      return HandValue(THREE_OF_A_KIND,
+                       pack5(to_cmp_rank(r), kickers[0], kickers[1]));
     }
   }
 
-  // 8. ワンペア
-  for (int r = NUM_RANKS - 1; r >= 0; --r) {
-    if (counts[r] + num_jokers >= 2)
-      return HandValue(ONE_PAIR, r);
+  // 7. ツーペア (ACEが最強順)
+  for (int ii = 0; ii < NUM_RANKS; ++ii) {
+    int r1 = RANK_DESC[ii];
+    if (counts[r1] < 2)
+      continue;
+    for (int jj = ii + 1; jj < NUM_RANKS; ++jj) {
+      int r2 = RANK_DESC[jj];
+      int needed = std::max(0, 2 - counts[r1]) + std::max(0, 2 - counts[r2]);
+      if (needed <= num_jokers) {
+        int kickers[1] = {0};
+        get_sorted_cmp_ranks(counts, kickers, 1, r1, r2);
+        return HandValue(TWO_PAIR, pack5(to_cmp_rank(r1), to_cmp_rank(r2),
+                                         kickers[0]));
+      }
+    }
+  }
+
+  // 8. ワンペア (ACEが最強順)
+  for (int ii = 0; ii < NUM_RANKS; ++ii) {
+    int r = RANK_DESC[ii];
+    if (counts[r] + num_jokers >= 2) {
+      int kickers[3] = {0};
+      get_sorted_cmp_ranks(counts, kickers, 3, r);
+      return HandValue(ONE_PAIR,
+                       pack5(to_cmp_rank(r), kickers[0], kickers[1], kickers[2]));
+    }
   }
 
   // 9. ハイカード
-  for (int r = NUM_RANKS - 1; r >= 0; --r) {
-    if (counts[r] > 0)
-      return HandValue(HIGH_CARD, r);
+  {
+    int kickers[5] = {0};
+    get_sorted_cmp_ranks(counts, kickers, 5);
+    return HandValue(HIGH_CARD,
+                     pack5(kickers[0], kickers[1], kickers[2], kickers[3],
+                           kickers[4]));
   }
-
-  return HandValue(HIGH_CARD, 0);
 }
 
 // ============================================
@@ -337,25 +425,29 @@ inline HandValue evaluate_3card(CardMask hand) {
   CardMask normal_cards = hand & ~JOKER_MASK;
   auto counts = count_ranks(normal_cards);
 
-  // トリップス
-  for (int r = NUM_RANKS - 1; r >= 0; --r) {
+  // トリップス (ACEが最強順)
+  for (int ii = 0; ii < NUM_RANKS; ++ii) {
+    int r = RANK_DESC[ii];
     if (counts[r] + num_jokers >= 3)
-      return HandValue(THREE_OF_A_KIND, r);
+      return HandValue(THREE_OF_A_KIND, to_cmp_rank(r));
   }
 
-  // ペア
-  for (int r = NUM_RANKS - 1; r >= 0; --r) {
-    if (counts[r] + num_jokers >= 2)
-      return HandValue(ONE_PAIR, r);
+  // ペア (ACEが最強順)
+  for (int ii = 0; ii < NUM_RANKS; ++ii) {
+    int r = RANK_DESC[ii];
+    if (counts[r] + num_jokers >= 2) {
+      int kicker[1] = {0};
+      get_sorted_cmp_ranks(counts, kicker, 1, r);
+      return HandValue(ONE_PAIR, pack5(to_cmp_rank(r), kicker[0]));
+    }
   }
 
   // ハイカード
-  for (int r = NUM_RANKS - 1; r >= 0; --r) {
-    if (counts[r] > 0)
-      return HandValue(HIGH_CARD, r);
+  {
+    int kickers[3] = {0};
+    get_sorted_cmp_ranks(counts, kickers, 3);
+    return HandValue(HIGH_CARD, pack5(kickers[0], kickers[1], kickers[2]));
   }
-
-  return HandValue(HIGH_CARD, 0);
 }
 
 // ============================================
@@ -372,13 +464,24 @@ inline bool is_foul(const HandValue &top, const HandValue &mid,
 // ファンタジーランド判定
 // ============================================
 
+// kickers から内部ランクを取得するヘルパー
+// 3枚ハンドのONE_PAIRは pack5(cmp_rank, kicker) なので上位4bitがペアランク
+inline Rank get_top_pair_rank(const HandValue &top) {
+  int cmp = (top.kickers >> 16) & 0xF;
+  return detail::from_cmp_rank(cmp);
+}
+
+// 3枚ハンドのTHREE_OF_A_KINDは cmp_rank そのまま
+inline Rank get_top_trips_rank(const HandValue &top) {
+  return detail::from_cmp_rank(top.kickers);
+}
+
 // FL突入条件: TopがQQ以上
 inline bool qualifies_for_fantasy_land(const HandValue &top) {
   if (top.rank == THREE_OF_A_KIND)
     return true;
   if (top.rank == ONE_PAIR) {
-    // ACE=0なので特殊処理: AA, KK, QQ がFL条件
-    Rank pair_rank = static_cast<Rank>(top.kickers);
+    Rank pair_rank = get_top_pair_rank(top);
     if (pair_rank == ACE || pair_rank == KING || pair_rank == QUEEN)
       return true;
   }
@@ -391,7 +494,7 @@ inline int fantasy_land_cards(const HandValue &top) {
   if (top.rank == THREE_OF_A_KIND)
     return 17;
   if (top.rank == ONE_PAIR) {
-    Rank pair_rank = static_cast<Rank>(top.kickers);
+    Rank pair_rank = get_top_pair_rank(top);
     if (pair_rank == ACE)
       return 16; // AA
     if (pair_rank == KING)
