@@ -1,168 +1,128 @@
 # OFC Pineapple AI
 
-Open-Face Chinese Poker (Pineapple) の深層強化学習AIプロジェクト。
+Open-Face Chinese Poker (Pineapple) 3-Max の強化学習AIプロジェクト。
 
 ## 概要
 
-3人対戦（3-Max）のOFC Pineappleをプレイする強化学習AIを開発しています。
-C++ゲームエンジン + MaskablePPO (Stable-Baselines3) による高速学習を実現。
+- 3人同時対戦の OFC Pineapple を MaskablePPO で学習
+- C++ ゲームエンジン + pybind11 による高速シミュレーション
+- 54枚デッキ（Joker 2枚）、Fantasy Land (Ultimate Rules) 対応
 
-## 現在の状況
+## 現在の状況 — V2 再学習中
 
-### Phase 9 完了・Phase 10 学習中 (2026-02-07)
+V1 で ACE=0 バグが発覚し、250M+ ステップの学習結果が無効に。
+V2 としてゼロから再設計・再学習を進行中。
 
-**Phase 9 (FL Mastery)** が250Mステップで完了し、全目標を達成しました。
-現在は **Phase 10 (FL Stay向上)** を学習中です。
+### V2 完了済み
+- **Phase 0**: C++ エンジン整備、報酬設計 3案 (A/B/C)
+- **Phase 1 Step 1**: 報酬アブレーション → **Config C (条件付きシェーピング) 採用確定**
+  - 5M 結果: Foul 33.2%, Score +5.86, FL追求差 +2.0%
+- **C++ エンジン網羅テスト**: 124/124 パス（ACE, 全役比較, Joker, FL条件, スコア計算, フォール判定）
 
-#### Phase 9 最終結果
-
-| 指標 | Phase 9 (250M) | 目標 | 評価 |
-|:---|---:|:---|:---|
-| Foul Rate | **16.8%** | <20% | ✅ プロレベル |
-| Mean Score | **+12.66** | >+10 | ✅ 達成 |
-| FL Entry Rate | **22.8%** | >15% | ✅ 達成 |
-| FL Stay Rate | **8.0%** | >5% | ✅ 達成 |
-| Win Rate | **75.8%** | >70% | ✅ 達成 |
-
-#### Phase 10 進行中
-
-- **目標**: FL Stay Rate 8% → 15%+
-- **手法**: 修正greedy_fl_solverでのFine-tuning
-- **現在**: 〜400k / 50M ステップ
-
-## 主な特徴
-
-- **高性能C++エンジン**: pybind11によるPythonバインディング、学習時 900-1000 FPS
-- **MaskablePPO**: 有効アクションのみを選択するアクション・マスキング
-- **3人対戦 (3-Max)**: 複数プレイヤーの戦略的インタラクション
-- **ジョーカー対応**: 54カードデッキ（ジョーカー2枚含む）
-- **Fantasy Land**: Ultimate Rules対応（QQ=14枚, KK=15枚, AA=16枚, Trips=17枚）
-- **Self-Play**: 同一モデルとの対戦による継続的強化
-- **ONNX Export**: Node.js統合用のONNXモデル出力対応
+### V2 次のタスク
+- **Phase 1 Step 2**: Self-Play プール拡張比較 (D: baseline vs E: extended)
+- **Phase 2**: 行動空間分離 + 30M 学習
+- **Phase 3**: Embedding + 250M 本学習
 
 ## 技術スタック
 
-- **ゲームエンジン**: C++ (Header-only) + pybind11
-- **強化学習**: Stable-Baselines3, sb3-contrib (MaskablePPO)
-- **環境**: PettingZoo AECEnv (マルチエージェント)
-- **並列化**: SubprocVecEnv (spawn method)
-- **クラウド**: GCP GCE (e2-standard-8)
-- **通知**: Discord Webhooks
-- **デプロイ**: ONNX Runtime (Node.js)
+| レイヤー | 技術 |
+|---------|------|
+| ゲームエンジン | C++17 (Header-only) + pybind11 |
+| 強化学習 | MaskablePPO (sb3-contrib) |
+| 環境 | PettingZoo AECEnv (3人マルチエージェント) |
+| 並列化 | SubprocVecEnv (spawn) |
+| 通知 | Discord Webhooks |
+| デプロイ | ONNX Runtime (Node.js) |
 
-## プロジェクト構造
+## クイックスタート
+
+```bash
+# 1. 仮想環境
+python3 -m venv .venv && source .venv/bin/activate
+
+# 2. 依存パッケージ（完全再現）
+pip install -r requirements-lock.txt
+
+# 3. C++ エンジンビルド
+python setup.py build_ext --inplace
+python -c "import ofc_engine as ofc; print('OK')"
+
+# 4. テスト（124テスト全パス確認）
+python tests/test_evaluator_comprehensive.py
+
+# 5. 学習テスト（数十秒で完了）
+python v2/train_v2.py --test-mode --reward-config C
+
+# 6. 本学習（Config C）
+DISCORD_WEBHOOK_URL='...' NUM_ENVS=4 python v2/train_v2.py --reward-config C --steps 5000000
+```
+
+詳細は [SETUP_GUIDE.md](SETUP_GUIDE.md) を参照。
+
+## プロジェクト構成
 
 ```
 OFC NN/
 ├── src/
-│   ├── cpp/                    # C++ゲームエンジン (Header-only)
-│   │   ├── game.hpp            # ゲームロジック、FL処理
-│   │   ├── board.hpp           # ボード管理 (bitboard)
-│   │   ├── evaluator.hpp       # 役判定 (Joker対応)
-│   │   ├── solver.hpp          # FL最適配置ソルバー
-│   │   └── pybind/bindings.cpp # Pythonバインディング
-│   └── python/                 # 学習・評価スクリプト
-│       ├── ofc_3max_env.py     # 3人対戦PettingZoo環境
-│       ├── greedy_fl_solver.py # 高速FL配置ソルバー
-│       ├── train_phase10_fl_stay.py  # Phase 10学習
-│       └── notifier.py         # Discord通知
+│   ├── cpp/                        # C++ ゲームエンジン
+│   │   ├── evaluator.hpp           #   ハンド評価 (ACE=14 修正済み)
+│   │   ├── board.hpp               #   Top(3)/Mid(5)/Bot(5) 管理
+│   │   ├── game.hpp                #   ゲーム進行・FL処理
+│   │   ├── solver.hpp              #   FL ブルートフォースソルバー
+│   │   └── pybind/bindings.cpp     #   Python バインディング
+│   └── python/
+│       ├── ofc_3max_env.py         #   PettingZoo 3人環境
+│       ├── greedy_fl_solver.py     #   FL 近似ソルバー
+│       └── notifier.py             #   Discord 通知
+├── v2/
+│   ├── train_v2.py                 # V2 学習スクリプト
+│   ├── rule_based_agent.py         # ルールベースエージェント (Safe/Aggressive)
+│   └── evaluate_benchmark.py       # ベンチマーク評価
+├── tests/
+│   ├── test_evaluator_comprehensive.py  # C++ エンジン 124テスト
+│   └── test_joker.py               # Joker テスト
 ├── docs/
-│   ├── learning/               # 学習ドキュメント
-│   ├── research/               # 研究レポート
-│   ├── reports/                # フェーズ別レポート
-│   └── blog/                   # 開発ブログ
-├── models/                     # 学習済みモデル
-│   ├── phase9/                 # Phase 9 チェックポイント
-│   ├── phase10/                # Phase 10 チェックポイント
-│   └── onnx/                   # ONNX変換済みモデル
-├── scripts/                    # 評価・テストスクリプト
-└── gcp/                        # GCPセットアップ
+│   ├── templates/                  # レポートテンプレート
+│   ├── experiments/                # 実験記録
+│   └── learning/                   # 技術学習ノート
+├── archive/v1/                     # V1 全記録 (git除外)
+├── setup.py                        # C++ ビルド設定
+├── requirements.txt                # 最小依存
+├── requirements-lock.txt           # 完全再現用ロック
+├── CLAUDE.md                       # プロジェクト運営ルール
+├── SETUP_GUIDE.md                  # 環境構築ガイド
+└── RESUME_PROMPT.md                # Claude Code 移行用プロンプト
 ```
 
-## クイックスタート
-
-### 1. エンジンのビルド
+## V2 学習コマンド
 
 ```bash
-python setup.py build_ext --inplace
-python -c "import ofc_engine as ofc; print('Engine loaded')"
+# Config C（確定済み報酬設定）でゼロから
+NUM_ENVS=4 python v2/train_v2.py --reward-config C --steps 5000000
+
+# Step 2: D（ベースライン）
+python v2/train_v2.py --reward-config C --steps 10000000 \
+  --run-name D --pool-size 5 --latest-prob 0.8 --rule-based-prob 0.0
+
+# Step 2: E（拡張版 — Self-Play プール拡大 + ルールベース混合）
+python v2/train_v2.py --reward-config C --steps 10000000 \
+  --run-name E --pool-size 15 --latest-prob 0.6 --rule-based-prob 0.1
+
+# チェックポイントからの再開（自動検出）
+python v2/train_v2.py --reward-config C --steps 10000000
 ```
 
-### 2. AIのテスト実行
+## V1 最終結果（参考値、ACE バグあり）
 
-```bash
-# AIのプレイを表示
-python src/python/visual_demo.py --games 1
+| 指標 | Phase 9 (250M) |
+|------|:-:|
+| Foul Rate | 16.8% |
+| FL Entry | 22.8% |
+| Win Rate | 75.8% |
 
-# 100ゲームの統計
-python src/python/visual_demo.py --stats 100
-```
-
-### 3. ローカル学習
-
-```bash
-# Phase 10 テスト (少量ステップ)
-NUM_ENVS=2 python src/python/train_phase10_fl_stay.py --steps 10000
-```
-
-### 4. GCPデプロイ
-
-```bash
-# インスタンス起動
-gcloud compute instances start ofc-training --zone=asia-northeast1-b
-
-# コード転送
-gcloud compute scp --recurse --zone=asia-northeast1-b \
-    src models setup.py ofc-training:~/ofc-training/
-
-# 学習開始
-gcloud compute ssh ofc-training --zone=asia-northeast1-b \
-    --command="cd ~/ofc-training && NUM_ENVS=4 nohup python3 \
-    src/python/train_phase10_fl_stay.py > training.log 2>&1 &"
-```
-
-## 学習フェーズ履歴
-
-| Phase | 説明 | Steps | Foul Rate | FL Entry | Win Rate |
-|:---|:---|---:|---:|---:|---:|
-| Phase 1-4 | 基礎学習 | 20M | 25% | - | - |
-| Phase 5 | 3-Max導入 | 30M | 38% | - | - |
-| Phase 7 | 並列学習 | 20M | 26% | 1% | 65% |
-| Phase 8 | Self-Play | 100M | 22% | 8% | 69% |
-| Phase 8.5 | FL導入 | 100M | 22% | 8% | 69% |
-| Phase 8.5b | Solver修正 | 150M | 18% | 21% | 75% |
-| **Phase 9** | **FL Mastery** | **250M** | **16.8%** | **22.8%** | **75.8%** |
-| Phase 10 | FL Stay向上 | 進行中 | - | - | - |
-
-## 評価基準
-
-### 人間レベル比較
-
-| レベル | Foul Rate | Royalty | FL Entry |
-|:---|---:|---:|---:|
-| 初心者 | 40-50% | 1-2 | 0-5% |
-| 中級者 | 25-35% | 3-5 | 5-10% |
-| 上級者 | 15-25% | 5-8 | 10-20% |
-| プロ | 10-20% | 7-12 | 15-30% |
-
-**現在のAI (Phase 9)**: プロレベル (Foul 16.8%, FL Entry 22.8%)
-
-## 保存済みモデル
-
-| ファイル | Steps | 用途 |
-|:---|---:|:---|
-| `models/phase9/p9_fl_mastery_250000000.zip` | 250M | 最新推奨モデル |
-| `models/onnx/ofc_ai.onnx` | - | Node.js統合用 |
-
-## ドキュメント
-
-- [現在の開発状況](docs/learning/04_current_status.md)
-- [Phase 9 レポート](docs/reports/phase9_fl_mastery_report.md)
-- [評価基準](docs/research/evaluation_metrics.md)
-- [次のアクション](NEXT_ACTIONS.md)
+V1 の全記録は `archive/v1/PROJECT_HISTORY.md` に保存。
 
 ## ライセンス
 
 Private - All Rights Reserved
-
----
