@@ -60,7 +60,7 @@ class OFC3MaxEnv(AECEnv):
     TOTAL_SLOTS = 13
     
     def __init__(self, render_mode=None, enable_fl_turns=True, continuous_games=False,
-                 fl_solver_mode='default', reward_config=None, extended_fl_obs=False):
+                 fl_solver_mode='default', reward_config=None, extended_fl_obs=True):
         """
         OFC 3-Max環境の初期化
 
@@ -129,10 +129,14 @@ class OFC3MaxEnv(AECEnv):
         }
 
         # 観測空間
-        # game_stateの次元数: 基本14 + 拡張FL観測6 = 最大20
+        # current_street を one-hot(5次元) に変更 (V2)
+        # game_stateの次元数: 基本18 + 拡張FL観測6 = 最大24
         if self.extended_fl_obs:
             game_state_high = np.array([
-                5, 3, 5, 5, 3, 5, 5, 3, 5, 5, 1, 17, 1, 1,
+                # current_street one-hot (5次元: Street 1-5)
+                1, 1, 1, 1, 1,
+                # ボード状態 (13次元)
+                3, 5, 5, 3, 5, 5, 3, 5, 5, 1, 17, 1, 1,
                 # 拡張FL観測 (6次元)
                 4,   # live_queens: 残りQ枚数 (0-4)
                 4,   # live_kings: 残りK枚数 (0-4)
@@ -142,7 +146,10 @@ class OFC3MaxEnv(AECEnv):
                 1,   # top_has_fl_card: TopにQ/K/A/Jokerがあるか
             ], dtype=np.float32)
         else:
-            game_state_high = np.array([5, 3, 5, 5, 3, 5, 5, 3, 5, 5, 1, 17, 1, 1], dtype=np.float32)
+            game_state_high = np.array([
+                1, 1, 1, 1, 1,  # current_street one-hot
+                3, 5, 5, 3, 5, 5, 3, 5, 5, 1, 17, 1, 1,
+            ], dtype=np.float32)
 
         self._observation_spaces = {
             agent: spaces.Dict({
@@ -692,8 +699,13 @@ class OFC3MaxEnv(AECEnv):
         # FL手札枚数を取得（通常は0-5、FL中は14-17）
         hand = ps.get_hand()
         fl_hand_count = len(hand) if ps.in_fantasy_land else 0
-        base_state = [
-            self.current_street,
+
+        # current_street を one-hot エンコード (V2)
+        street_onehot = [0.0] * 5
+        if 1 <= self.current_street <= 5:
+            street_onehot[self.current_street - 1] = 1.0
+
+        base_state = street_onehot + [
             ps.board.count(ofc.TOP),
             ps.board.count(ofc.MIDDLE),
             ps.board.count(ofc.BOTTOM),

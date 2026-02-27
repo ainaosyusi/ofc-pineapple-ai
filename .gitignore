@@ -66,3 +66,13 @@ gcp_backup/
 
 # Linux venv
 venv_linux/
+
+# V1 Archive (too large for git)
+archive/
+
+# ONNX models
+models/onnx/
+models/exit/
+
+# Plots (generated)
+plots/
