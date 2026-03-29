@@ -1,5 +1,12 @@
 # OFC Pineapple AI
 
+![Python](https://img.shields.io/badge/Python-3.9+-3776AB?logo=python&logoColor=white)
+![C++](https://img.shields.io/badge/C++-17-00599C?logo=cplusplus&logoColor=white)
+![PyTorch](https://img.shields.io/badge/PyTorch-2.8-EE4C2C?logo=pytorch&logoColor=white)
+![SB3](https://img.shields.io/badge/Stable--Baselines3-MaskablePPO-blue)
+![Tests](https://img.shields.io/badge/Tests-124%2F124%20passed-brightgreen)
+![License](https://img.shields.io/badge/License-Private-red)
+
 Open-Face Chinese Poker (Pineapple) 3-Max の強化学習AIプロジェクト。
 
 ## 概要
